@@ -1,0 +1,6 @@
+{
+  "name": "8-Bit Chiptune Synth Prototype",
+  "description": "Prototipagem de sintetizador 8-bit com WebAudio Worklet",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
