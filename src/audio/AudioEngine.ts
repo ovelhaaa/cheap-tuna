@@ -25,19 +25,39 @@ export class AudioEngine {
         }
     }
 
-    playNote(freq: number) {
+    playNote(voice: string, freq: number) {
         if (!this.workletNode) return;
-        this.workletNode.port.postMessage({ type: 'note_on', frequency: freq });
+        this.workletNode.port.postMessage({ type: 'note_on', voice, frequency: freq });
     }
 
-    stopNote() {
+    stopNote(voice: string) {
         if (!this.workletNode) return;
-        this.workletNode.port.postMessage({ type: 'note_off' });
+        this.workletNode.port.postMessage({ type: 'note_off', voice });
     }
 
-    setDuty(mode: number) {
+    setDuty(voice: string, mode: number) {
         if (!this.workletNode) return;
-        this.workletNode.port.postMessage({ type: 'set_duty', mode });
+        this.workletNode.port.postMessage({ type: 'set_duty', voice, mode });
+    }
+    
+    setEnvelope(voice: string, decayRate: number, loop: boolean) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'set_envelope', voice, decayRate, loop });
+    }
+    
+    setNoiseMode(mode: number) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'set_noise_mode', mode });
+    }
+    
+    setNoisePeriod(index: number) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'set_noise_period', index });
+    }
+    
+    setNoisePlaying(playing: boolean) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'set_noise_playing', playing });
     }
 }
 
