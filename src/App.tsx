@@ -1,44 +1,111 @@
-import { useState, useEffect, useCallback, MouseEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, MouseEvent, TouchEvent } from 'react';
 import { audioEngine } from './audio/AudioEngine';
 import { Volume2, Power, Activity, Disc3 } from 'lucide-react';
 
-const KEY_FREQUENCIES: Record<string, { note: string, freq: number }> = {
-    'z': { note: 'C4', freq: 261.63 },
-    's': { note: 'C#4', freq: 277.18 },
-    'x': { note: 'D4', freq: 293.66 },
-    'd': { note: 'D#4', freq: 311.13 },
-    'c': { note: 'E4', freq: 329.63 },
-    'v': { note: 'F4', freq: 349.23 },
-    'g': { note: 'F#4', freq: 369.99 },
-    'b': { note: 'G4', freq: 392.00 },
-    'h': { note: 'G#4', freq: 415.30 },
-    'n': { note: 'A4', freq: 440.00 },
-    'j': { note: 'A#4', freq: 466.16 },
-    'm': { note: 'B4', freq: 493.88 },
-    ',': { note: 'C5', freq: 523.25 },
-};
+const BASE_NOTES = [
+    { key: 'z', noteName: 'C', offset: 0, isBlack: false },
+    { key: 's', noteName: 'C#', offset: 1, isBlack: true },
+    { key: 'x', noteName: 'D', offset: 2, isBlack: false },
+    { key: 'd', noteName: 'D#', offset: 3, isBlack: true },
+    { key: 'c', noteName: 'E', offset: 4, isBlack: false },
+    { key: 'v', noteName: 'F', offset: 5, isBlack: false },
+    { key: 'g', noteName: 'F#', offset: 6, isBlack: true },
+    { key: 'b', noteName: 'G', offset: 7, isBlack: false },
+    { key: 'h', noteName: 'G#', offset: 8, isBlack: true },
+    { key: 'n', noteName: 'A', offset: 9, isBlack: false },
+    { key: 'j', noteName: 'A#', offset: 10, isBlack: true },
+    { key: 'm', noteName: 'B', offset: 11, isBlack: false },
+    { key: ',', noteName: 'C', offset: 12, isBlack: false },
+];
 
 type VoiceType = 'pulse1' | 'pulse2' | 'triangle';
 
+const ARP_PATTERNS = [
+    { name: 'Major Triad', value: [0, 4, 7] },
+    { name: 'Minor Triad', value: [0, 3, 7] },
+    { name: 'Octave Jump', value: [0, 12] },
+    { name: 'Octave Arp', value: [0, 12, 24] },
+    { name: 'Sus4', value: [0, 5, 7] },
+];
+
+interface ArpConfig {
+    enabled: boolean;
+    pattern: number[];
+    speed: number;
+}
+
+interface VibratoConfig {
+    enabled: boolean;
+    rate: number;
+    depth: number;
+}
+
 interface PulseConfig {
     duty: number;
-    decay: number;
+    decay: number; // For backward compatibility / simple UI
     loop: boolean;
+    envMode: 'AD' | 'AHDS';
+    attackRate: number;
+    holdTime: number;
+    sustainLevel: number;
+    releaseRate: number;
+    detune: number;
+    arp: ArpConfig;
+    vibrato: VibratoConfig;
+}
+
+interface TriangleConfig {
+    vibrato: VibratoConfig;
 }
 
 export default function App() {
     const [started, setStarted] = useState(false);
     const [activeVoice, setActiveVoice] = useState<VoiceType>('pulse1');
     const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
+    const [octave, setOctave] = useState(4);
+
+    const currentKeyMap = useMemo(() => {
+        const map: Record<string, { note: string, freq: number }> = {};
+        for (const note of BASE_NOTES) {
+            const actualOctave = octave + Math.floor(note.offset / 12);
+            const a4 = 440;
+            const noteIndex = (octave - 4) * 12 + note.offset;
+            const freq = a4 * Math.pow(2, (noteIndex - 9) / 12);
+            map[note.key] = {
+                note: `${note.noteName}${actualOctave}`,
+                freq
+            };
+        }
+        return map;
+    }, [octave]);
 
     // Pulse Config
-    const [pulse1, setPulse1] = useState<PulseConfig>({ duty: 2, decay: 15, loop: false });
-    const [pulse2, setPulse2] = useState<PulseConfig>({ duty: 1, decay: 15, loop: false });
+    const [pulse1, setPulse1] = useState<PulseConfig>({ 
+        duty: 2, decay: 15, loop: false, 
+        envMode: 'AD', attackRate: 2, holdTime: 0, sustainLevel: 8, releaseRate: 5, detune: 0,
+        arp: { enabled: false, pattern: [0, 4, 7], speed: 30 },
+        vibrato: { enabled: false, rate: 6, depth: 2 }
+    });
+    const [pulse2, setPulse2] = useState<PulseConfig>({ 
+        duty: 1, decay: 15, loop: false, 
+        envMode: 'AD', attackRate: 2, holdTime: 0, sustainLevel: 8, releaseRate: 5, detune: 0,
+        arp: { enabled: false, pattern: [0, 4, 7], speed: 30 },
+        vibrato: { enabled: false, rate: 6, depth: 2 }
+    });
+    
+    // Triangle Config
+    const [triangle, setTriangle] = useState<TriangleConfig>({
+        vibrato: { enabled: false, rate: 6, depth: 2 }
+    });
 
     // Noise Config
     const [noiseMode, setNoiseMode] = useState(0); // 0 = long, 1 = short
     const [noisePeriod, setNoisePeriod] = useState(0); // 0-15
     const [noisePlaying, setNoisePlaying] = useState(false);
+
+    // Polyphony mode
+    const [polyMode, setPolyMode] = useState(false);
+    const [polyVoices, setPolyVoices] = useState<{pulse1: string | null, pulse2: string | null}>({ pulse1: null, pulse2: null });
 
     const startEngine = async () => {
         await audioEngine.init();
@@ -46,39 +113,89 @@ export default function App() {
         setStarted(true);
         // Initialize worklet state
         audioEngine.setDuty('pulse1', pulse1.duty);
-        audioEngine.setEnvelope('pulse1', pulse1.decay, pulse1.loop);
+        audioEngine.setEnvelope('pulse1', pulse1.decay, pulse1.loop, pulse1.envMode, pulse1.attackRate, pulse1.holdTime, pulse1.sustainLevel, pulse1.releaseRate);
+        audioEngine.setDetune('pulse1', pulse1.detune);
+        audioEngine.setArp('pulse1', pulse1.arp.enabled, pulse1.arp.pattern, pulse1.arp.speed);
+        audioEngine.setVibrato('pulse1', pulse1.vibrato.enabled, pulse1.vibrato.rate, pulse1.vibrato.depth);
+        
         audioEngine.setDuty('pulse2', pulse2.duty);
-        audioEngine.setEnvelope('pulse2', pulse2.decay, pulse2.loop);
+        audioEngine.setEnvelope('pulse2', pulse2.decay, pulse2.loop, pulse2.envMode, pulse2.attackRate, pulse2.holdTime, pulse2.sustainLevel, pulse2.releaseRate);
+        audioEngine.setDetune('pulse2', pulse2.detune);
+        audioEngine.setArp('pulse2', pulse2.arp.enabled, pulse2.arp.pattern, pulse2.arp.speed);
+        audioEngine.setVibrato('pulse2', pulse2.vibrato.enabled, pulse2.vibrato.rate, pulse2.vibrato.depth);
+        
+        audioEngine.setVibrato('triangle', triangle.vibrato.enabled, triangle.vibrato.rate, triangle.vibrato.depth);
+        
         audioEngine.setNoiseMode(noiseMode);
         audioEngine.setNoisePeriod(noisePeriod);
     };
 
     const pressKey = useCallback((key: string) => {
-        if (KEY_FREQUENCIES[key]) {
-            setActiveKeys(prev => {
-                const next = new Set(prev);
-                next.add(key);
-                return next;
+        if (!currentKeyMap[key]) return;
+        
+        setActiveKeys(prev => {
+            const next = new Set(prev);
+            next.add(key);
+            return next;
+        });
+
+        if (polyMode) {
+            setPolyVoices(prevVoices => {
+                let nextVoices = { ...prevVoices };
+                // If key is already assigned, ignore
+                if (nextVoices.pulse1 === key || nextVoices.pulse2 === key) return nextVoices;
+                
+                if (!nextVoices.pulse1) {
+                    nextVoices.pulse1 = key;
+                    audioEngine.playNote('pulse1', currentKeyMap[key].freq);
+                } else if (!nextVoices.pulse2) {
+                    nextVoices.pulse2 = key;
+                    audioEngine.playNote('pulse2', currentKeyMap[key].freq);
+                } else {
+                    // Steal pulse1
+                    nextVoices.pulse1 = key;
+                    audioEngine.playNote('pulse1', currentKeyMap[key].freq);
+                }
+                return nextVoices;
             });
-            audioEngine.playNote(activeVoice, KEY_FREQUENCIES[key].freq);
+        } else {
+            audioEngine.playNote(activeVoice, currentKeyMap[key].freq);
         }
-    }, [activeVoice]);
+    }, [activeVoice, polyMode, currentKeyMap]);
 
     const releaseKey = useCallback((key: string) => {
-        if (KEY_FREQUENCIES[key]) {
-            setActiveKeys(prev => {
-                const next = new Set(prev);
-                next.delete(key);
+        if (!currentKeyMap[key]) return;
+        
+        setActiveKeys(prev => {
+            const next = new Set(prev);
+            next.delete(key);
+            
+            if (!polyMode) {
                 if (next.size === 0) {
                     audioEngine.stopNote(activeVoice);
                 } else {
-                    const lastKey = Array.from(next).pop();
-                    if (lastKey) audioEngine.playNote(activeVoice, KEY_FREQUENCIES[lastKey].freq);
+                    const lastKey = Array.from(next).pop() as string;
+                    if (lastKey && currentKeyMap[lastKey]) audioEngine.playNote(activeVoice, currentKeyMap[lastKey].freq);
                 }
-                return next;
+            }
+            return next;
+        });
+
+        if (polyMode) {
+            setPolyVoices(prevVoices => {
+                let nextVoices = { ...prevVoices };
+                if (nextVoices.pulse1 === key) {
+                    nextVoices.pulse1 = null;
+                    audioEngine.stopNote('pulse1');
+                }
+                if (nextVoices.pulse2 === key) {
+                    nextVoices.pulse2 = null;
+                    audioEngine.stopNote('pulse2');
+                }
+                return nextVoices;
             });
         }
-    }, [activeVoice]);
+    }, [activeVoice, polyMode, currentKeyMap]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.repeat) return;
@@ -118,14 +235,42 @@ export default function App() {
         }
     };
 
+    // Handle touch events on keys
+    const handleKeyTouchStart = (key: string) => (e: TouchEvent) => {
+        if (e.cancelable) e.preventDefault();
+        pressKey(key);
+    };
+
+    const handleKeyTouchEnd = (key: string) => (e: TouchEvent) => {
+        if (e.cancelable) e.preventDefault();
+        releaseKey(key);
+    };
+
     // Updaters
     const updatePulse = (voice: 'pulse1' | 'pulse2', updates: Partial<PulseConfig>) => {
         const setState = voice === 'pulse1' ? setPulse1 : setPulse2;
         setState(prev => {
             const next = { ...prev, ...updates };
             if (updates.duty !== undefined) audioEngine.setDuty(voice, next.duty);
-            if (updates.decay !== undefined || updates.loop !== undefined) {
-                audioEngine.setEnvelope(voice, next.decay, next.loop);
+            if (updates.decay !== undefined || updates.loop !== undefined || updates.envMode !== undefined || updates.attackRate !== undefined || updates.holdTime !== undefined || updates.sustainLevel !== undefined || updates.releaseRate !== undefined) {
+                audioEngine.setEnvelope(voice, next.decay, next.loop, next.envMode, next.attackRate, next.holdTime, next.sustainLevel, next.releaseRate);
+            }
+            if (updates.detune !== undefined) audioEngine.setDetune(voice, next.detune);
+            if (updates.arp !== undefined) {
+                audioEngine.setArp(voice, next.arp.enabled, next.arp.pattern, next.arp.speed);
+            }
+            if (updates.vibrato !== undefined) {
+                audioEngine.setVibrato(voice, next.vibrato.enabled, next.vibrato.rate, next.vibrato.depth);
+            }
+            return next;
+        });
+    };
+
+    const updateTriangle = (updates: Partial<TriangleConfig>) => {
+        setTriangle(prev => {
+            const next = { ...prev, ...updates };
+            if (updates.vibrato !== undefined) {
+                audioEngine.setVibrato('triangle', next.vibrato.enabled, next.vibrato.rate, next.vibrato.depth);
             }
             return next;
         });
@@ -137,14 +282,72 @@ export default function App() {
         audioEngine.setNoisePlaying(next);
     };
 
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        if (!started) return;
+        
+        let animationId: number;
+        
+        const draw = () => {
+            const canvas = canvasRef.current;
+            const analyser = audioEngine.getAnalyser();
+            if (!canvas || !analyser) {
+                animationId = requestAnimationFrame(draw);
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(dataArray);
+
+            ctx.fillStyle = 'rgb(10, 10, 10)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#4ade80'; // green-400
+            ctx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+
+            animationId = requestAnimationFrame(draw);
+        };
+
+        draw();
+
+        return () => {
+            cancelAnimationFrame(animationId);
+        };
+    }, [started]);
+
     return (
         <div className="min-h-screen bg-neutral-950 text-neutral-200 flex flex-col items-center py-12 px-4 font-mono">
-            <header className="mb-12 text-center">
+            <header className="mb-8 text-center w-full max-w-4xl">
                 <h1 className="text-2xl font-bold text-green-400 mb-2 flex items-center justify-center gap-2">
                     <Activity className="w-6 h-6" />
                     8-Bit Synth Prototype
                 </h1>
-                <p className="text-neutral-500 text-sm">Full Engine Validation</p>
+                <p className="text-neutral-500 text-sm mb-6">Full Engine Validation</p>
             </header>
 
             {!started ? (
@@ -197,6 +400,7 @@ export default function App() {
                                 {activeVoice === 'triangle' ? 'Control: Active' : 'Select'}
                             </button>
                         </div>
+                        <VibratoControls config={triangle.vibrato} onChange={(v) => updateTriangle({ vibrato: v })} />
                     </div>
 
                     {/* Right Column: Noise & Keyboard */}
@@ -264,28 +468,103 @@ export default function App() {
                         <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6">
                             <div className="flex justify-between items-end mb-4">
                                 <h2 className="text-sm uppercase tracking-wider text-neutral-400">Keyboard Controls</h2>
-                                <span className="text-xs text-green-400">Target: {activeVoice.toUpperCase()}</span>
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2 mr-4">
+                                        <button 
+                                            onClick={() => setOctave(o => Math.max(1, o - 1))}
+                                            className="px-2 py-0.5 text-[10px] rounded border bg-neutral-950 text-neutral-500 border-neutral-800 hover:text-neutral-300 transition-colors"
+                                        >
+                                            OCT -
+                                        </button>
+                                        <span className="text-[10px] text-green-400 w-4 text-center">{octave}</span>
+                                        <button 
+                                            onClick={() => setOctave(o => Math.min(7, o + 1))}
+                                            className="px-2 py-0.5 text-[10px] rounded border bg-neutral-950 text-neutral-500 border-neutral-800 hover:text-neutral-300 transition-colors"
+                                        >
+                                            OCT +
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] uppercase text-neutral-500">Mode</span>
+                                        <button 
+                                            onClick={() => {
+                                                setPolyMode(false);
+                                                audioEngine.stopNote('pulse1');
+                                                audioEngine.stopNote('pulse2');
+                                                setPolyVoices({pulse1: null, pulse2: null});
+                                            }}
+                                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${!polyMode ? 'bg-neutral-800 text-green-400 border-green-500/50' : 'bg-neutral-950 text-neutral-500 border-neutral-800'}`}
+                                        >
+                                            Mono
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                setPolyMode(true);
+                                                audioEngine.stopNote(activeVoice);
+                                            }}
+                                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${polyMode ? 'bg-neutral-800 text-green-400 border-green-500/50' : 'bg-neutral-950 text-neutral-500 border-neutral-800'}`}
+                                        >
+                                            Poly (2V)
+                                        </button>
+                                    </div>
+                                    {!polyMode ? (
+                                        <span className="text-xs text-green-400">Target: {activeVoice.toUpperCase()}</span>
+                                    ) : (
+                                        <span className="text-xs text-green-400">Target: PULSE 1+2</span>
+                                    )}
+                                </div>
                             </div>
-                            <div className="bg-neutral-950 p-4 rounded border border-neutral-800 select-none">
-                                <div className="grid grid-cols-13 gap-1 relative h-32">
-                                    {Object.entries(KEY_FREQUENCIES).map(([key, data], i) => {
-                                        const isBlack = data.note.includes('#');
-                                        const isActive = activeKeys.has(key);
+                            
+                            <div className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 overflow-hidden mb-4">
+                                <canvas 
+                                    ref={canvasRef} 
+                                    width={800} 
+                                    height={80} 
+                                    className="w-full h-20 rounded"
+                                />
+                            </div>
+
+                            <div className="bg-neutral-950 p-4 rounded border border-neutral-800 select-none touch-none overflow-hidden">
+                                <div className="flex relative h-32 gap-1">
+                                    {BASE_NOTES.filter(n => !n.isBlack).map((whiteNote) => {
+                                        const blackNote = BASE_NOTES.find(n => n.offset === whiteNote.offset + 1 && n.isBlack);
+                                        const isWhiteActive = activeKeys.has(whiteNote.key);
                                         return (
-                                            <div 
-                                                key={key}
-                                                onMouseDown={handleKeyMouseDown(key)}
-                                                onMouseUp={handleKeyMouseUp(key)}
-                                                onMouseLeave={handleKeyMouseLeave(key)}
-                                                className={`
-                                                    flex flex-col items-center justify-end pb-2 text-xs rounded border cursor-pointer
-                                                    ${isBlack ? 'bg-neutral-900 text-neutral-500 border-neutral-700 absolute h-20 w-8 z-10' : 'bg-neutral-800 text-neutral-300 border-neutral-700 h-full w-full'}
-                                                    ${isActive ? '!bg-green-500/20 !text-green-400 !border-green-500' : 'hover:border-neutral-500'}
-                                                `}
-                                                style={isBlack ? { left: `calc(${(i - 0.5) * (100 / 7)}% + 2px)` } : {}}
-                                            >
-                                                <span className="font-bold mb-1">{key.toUpperCase()}</span>
-                                                <span className="opacity-50 text-[10px]">{data.note}</span>
+                                            <div key={whiteNote.key} className="flex-1 relative">
+                                                <div 
+                                                    onMouseDown={handleKeyMouseDown(whiteNote.key)}
+                                                    onMouseUp={handleKeyMouseUp(whiteNote.key)}
+                                                    onMouseLeave={handleKeyMouseLeave(whiteNote.key)}
+                                                    onTouchStart={handleKeyTouchStart(whiteNote.key)}
+                                                    onTouchEnd={handleKeyTouchEnd(whiteNote.key)}
+                                                    onTouchCancel={handleKeyTouchEnd(whiteNote.key)}
+                                                    className={`
+                                                        absolute inset-0 flex flex-col items-center justify-end pb-2 text-xs rounded border cursor-pointer
+                                                        ${isWhiteActive ? '!bg-green-500/20 !text-green-400 !border-green-500' : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:border-neutral-500'}
+                                                    `}
+                                                >
+                                                    <span className="font-bold mb-1">{whiteNote.key.toUpperCase()}</span>
+                                                    <span className="opacity-50 text-[10px]">{currentKeyMap[whiteNote.key].note}</span>
+                                                </div>
+                                                
+                                                {blackNote && (
+                                                    <div 
+                                                        onMouseDown={handleKeyMouseDown(blackNote.key)}
+                                                        onMouseUp={handleKeyMouseUp(blackNote.key)}
+                                                        onMouseLeave={handleKeyMouseLeave(blackNote.key)}
+                                                        onTouchStart={handleKeyTouchStart(blackNote.key)}
+                                                        onTouchEnd={handleKeyTouchEnd(blackNote.key)}
+                                                        onTouchCancel={handleKeyTouchEnd(blackNote.key)}
+                                                        className={`
+                                                            absolute top-0 w-8 h-20 z-10 flex flex-col items-center justify-end pb-2 text-xs rounded border cursor-pointer
+                                                            ${activeKeys.has(blackNote.key) ? '!bg-green-500/20 !text-green-400 !border-green-500' : 'bg-neutral-900 text-neutral-500 border-neutral-700 hover:border-neutral-500'}
+                                                        `}
+                                                        style={{ right: '-18px' }}
+                                                    >
+                                                        <span className="font-bold mb-1">{blackNote.key.toUpperCase()}</span>
+                                                        <span className="opacity-50 text-[10px]">{currentKeyMap[blackNote.key].note}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -349,30 +628,176 @@ function PulseControls({
                         ))}
                     </div>
                 </div>
-                
                 <div className="space-y-2">
                     <div className="flex justify-between">
-                        <label className="text-xs text-neutral-500">Envelope Decay</label>
-                        <span className="text-xs text-green-400">{config.decay}</span>
+                        <label className="text-xs text-neutral-500">Detune</label>
+                        <span className="text-xs text-green-400">{config.detune}</span>
                     </div>
                     <input 
-                        type="range" 
-                        min="1" max="15" 
-                        value={config.decay}
-                        onChange={(e) => onChange({ decay: parseInt(e.target.value) })}
+                        type="range" min="-10" max="10" 
+                        value={config.detune}
+                        onChange={(e) => onChange({ detune: parseInt(e.target.value) })}
                         className="w-full accent-green-500"
                     />
-                    <label className="flex items-center gap-2 cursor-pointer mt-1">
-                        <input 
-                            type="checkbox" 
-                            checked={config.loop}
-                            onChange={(e) => onChange({ loop: e.target.checked })}
-                            className="accent-green-500 rounded bg-neutral-900 border-neutral-700"
-                        />
-                        <span className="text-xs text-neutral-400">Loop Envelope</span>
-                    </label>
                 </div>
             </div>
+            
+            <div className="space-y-2 pt-2 border-t border-neutral-800">
+                <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs text-neutral-500 uppercase">Quantized Envelope</label>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => onChange({ envMode: 'AD' })}
+                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${config.envMode === 'AD' ? 'bg-neutral-800 text-green-400 border-green-500/50' : 'bg-neutral-950 text-neutral-500 border-neutral-800'}`}
+                        >
+                            AD
+                        </button>
+                        <button
+                            onClick={() => onChange({ envMode: 'AHDS' })}
+                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${config.envMode === 'AHDS' ? 'bg-neutral-800 text-green-400 border-green-500/50' : 'bg-neutral-950 text-neutral-500 border-neutral-800'}`}
+                        >
+                            AHDS
+                        </button>
+                        <label className="flex items-center gap-1 cursor-pointer ml-2">
+                            <input type="checkbox" checked={config.loop} onChange={e => onChange({ loop: e.target.checked })} className="accent-green-500 rounded bg-neutral-900 border-neutral-700" />
+                            <span className="text-[10px] text-neutral-400">Loop</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="flex flex-col">
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-neutral-500">Attack</span>
+                            <span className="text-[10px] text-green-400">{config.attackRate}</span>
+                        </div>
+                        <input type="range" min="0" max="15" value={config.attackRate} onChange={e => onChange({ attackRate: parseInt(e.target.value) })} className="accent-green-500" />
+                    </div>
+                    {config.envMode === 'AHDS' && (
+                        <div className="flex flex-col">
+                            <div className="flex justify-between">
+                                <span className="text-[10px] text-neutral-500">Hold</span>
+                                <span className="text-[10px] text-green-400">{config.holdTime}</span>
+                            </div>
+                            <input type="range" min="0" max="60" value={config.holdTime} onChange={e => onChange({ holdTime: parseInt(e.target.value) })} className="accent-green-500" />
+                        </div>
+                    )}
+                    <div className="flex flex-col">
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-neutral-500">Decay</span>
+                            <span className="text-[10px] text-green-400">{config.decay}</span>
+                        </div>
+                        <input type="range" min="1" max="15" value={config.decay} onChange={e => onChange({ decay: parseInt(e.target.value) })} className="accent-green-500" />
+                    </div>
+                    {config.envMode === 'AHDS' && (
+                        <>
+                            <div className="flex flex-col">
+                                <div className="flex justify-between">
+                                    <span className="text-[10px] text-neutral-500">Sustain</span>
+                                    <span className="text-[10px] text-green-400">{config.sustainLevel}</span>
+                                </div>
+                                <input type="range" min="0" max="15" value={config.sustainLevel} onChange={e => onChange({ sustainLevel: parseInt(e.target.value) })} className="accent-green-500" />
+                            </div>
+                            <div className="flex flex-col">
+                                <div className="flex justify-between">
+                                    <span className="text-[10px] text-neutral-500">Release</span>
+                                    <span className="text-[10px] text-green-400">{config.releaseRate}</span>
+                                </div>
+                                <input type="range" min="1" max="15" value={config.releaseRate} onChange={e => onChange({ releaseRate: parseInt(e.target.value) })} className="accent-green-500" />
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+            
+            <div className="space-y-2 pt-2 border-t border-neutral-800">
+                <div className="flex items-center justify-between">
+                    <label className="text-xs text-neutral-500 uppercase">Arpeggiator</label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            checked={config.arp.enabled}
+                            onChange={(e) => onChange({ arp: { ...config.arp, enabled: e.target.checked } })}
+                            className="accent-green-500 rounded bg-neutral-900 border-neutral-700"
+                        />
+                        <span className="text-xs text-neutral-400">Enable</span>
+                    </label>
+                </div>
+                {config.arp.enabled && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <select 
+                            value={JSON.stringify(config.arp.pattern)}
+                            onChange={(e) => onChange({ arp: { ...config.arp, pattern: JSON.parse(e.target.value) } })}
+                            className="bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-xs text-neutral-300"
+                        >
+                            {ARP_PATTERNS.map(p => (
+                                <option key={p.name} value={JSON.stringify(p.value)}>{p.name}</option>
+                            ))}
+                        </select>
+                        <div className="flex flex-col">
+                            <div className="flex justify-between">
+                                <span className="text-[10px] text-neutral-500">Speed</span>
+                                <span className="text-[10px] text-green-400">{config.arp.speed} Hz</span>
+                            </div>
+                            <input 
+                                type="range" min="10" max="60" step="1"
+                                value={config.arp.speed}
+                                onChange={(e) => onChange({ arp: { ...config.arp, speed: parseInt(e.target.value) } })}
+                                className="accent-green-500"
+                            />
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <VibratoControls config={config.vibrato} onChange={(v) => onChange({ vibrato: v })} />
+        </div>
+    );
+}
+
+function VibratoControls({ config, onChange }: { config: VibratoConfig, onChange: (u: VibratoConfig) => void }) {
+    return (
+        <div className="space-y-2 pt-2 border-t border-neutral-800">
+            <div className="flex items-center justify-between">
+                <label className="text-xs text-neutral-500 uppercase">Vibrato</label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                        type="checkbox" 
+                        checked={config.enabled}
+                        onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
+                        className="accent-green-500 rounded bg-neutral-900 border-neutral-700"
+                    />
+                    <span className="text-xs text-neutral-400">Enable</span>
+                </label>
+            </div>
+            {config.enabled && (
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col">
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-neutral-500">Rate</span>
+                            <span className="text-[10px] text-green-400">{config.rate} Hz</span>
+                        </div>
+                        <input 
+                            type="range" min="1" max="12" step="0.5"
+                            value={config.rate}
+                            onChange={(e) => onChange({ ...config, rate: parseFloat(e.target.value) })}
+                            className="accent-green-500"
+                        />
+                    </div>
+                    <div className="flex flex-col">
+                        <div className="flex justify-between">
+                            <span className="text-[10px] text-neutral-500">Depth</span>
+                            <span className="text-[10px] text-green-400">{config.depth} Steps</span>
+                        </div>
+                        <input 
+                            type="range" min="1" max="8" step="1"
+                            value={config.depth}
+                            onChange={(e) => onChange({ ...config, depth: parseInt(e.target.value) })}
+                            className="accent-green-500"
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
