@@ -85,6 +85,43 @@ export class AudioEngine {
         if (!this.workletNode) return;
         this.workletNode.port.postMessage({ type: 'set_vibrato', voice, enabled, rate, depth });
     }
+
+    // Sequencer methods
+    playSequencer() {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_play' });
+    }
+
+    pauseSequencer() {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_pause' });
+    }
+
+    stopSequencer() {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_stop' });
+    }
+
+    setSequencerBPM(bpm: number) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_set_bpm', bpm });
+    }
+
+    setSequencerPattern(stepPattern: any) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_set_pattern', stepPattern });
+    }
+
+    onStep(callback: (step: number) => void) {
+        if (!this.workletNode) return;
+        // Listen to port messages for step
+        this.workletNode.port.addEventListener('message', (e) => {
+            if (e.data.type === 'step') {
+                callback(e.data.step);
+            }
+        });
+        this.workletNode.port.start();
+    }
 }
 
 export const audioEngine = new AudioEngine();

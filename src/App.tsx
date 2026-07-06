@@ -15,8 +15,17 @@ const BASE_NOTES = [
     { key: 'n', noteName: 'A', offset: 9, isBlack: false },
     { key: 'j', noteName: 'A#', offset: 10, isBlack: true },
     { key: 'm', noteName: 'B', offset: 11, isBlack: false },
-    { key: ',', noteName: 'C', offset: 12, isBlack: false },
+    { key: ',', noteName: 'C', offset: 12, isBlack: false }
 ];
+
+const ALL_NOTES_LIST = Array.from({ length: 12 * 7 }, (_, i) => {
+    const octave = Math.floor(i / 12) + 1;
+    const note = BASE_NOTES[i % 12];
+    const a4 = 440;
+    const noteIndex = (octave - 4) * 12 + note.offset;
+    const freq = a4 * Math.pow(2, (noteIndex - 9) / 12);
+    return { name: `${note.noteName}${octave}`, freq };
+});
 
 type VoiceType = 'pulse1' | 'pulse2' | 'triangle';
 
@@ -58,11 +67,37 @@ interface TriangleConfig {
     vibrato: VibratoConfig;
 }
 
+type StepData = {
+    active: boolean;
+    freq?: number;
+    noteOff?: boolean;
+};
+
+type TrackPattern = StepData[];
+
+type StepPattern = {
+    pulse1: TrackPattern;
+    pulse2: TrackPattern;
+    triangle: TrackPattern;
+    noise: TrackPattern;
+};
+
 export default function App() {
     const [started, setStarted] = useState(false);
     const [activeVoice, setActiveVoice] = useState<VoiceType>('pulse1');
     const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
     const [octave, setOctave] = useState(4);
+
+    // Sequencer State
+    const [bpm, setBpm] = useState(120);
+    const [sequencerPlaying, setSequencerPlaying] = useState(false);
+    const [currentStep, setCurrentStep] = useState(0);
+    const [pattern, setPattern] = useState<StepPattern>({
+        pulse1: Array.from({ length: 16 }, () => ({ active: false })),
+        pulse2: Array.from({ length: 16 }, () => ({ active: false })),
+        triangle: Array.from({ length: 16 }, () => ({ active: false })),
+        noise: Array.from({ length: 16 }, () => ({ active: false })),
+    });
 
     const currentKeyMap = useMemo(() => {
         const map: Record<string, { note: string, freq: number }> = {};
@@ -128,7 +163,26 @@ export default function App() {
         
         audioEngine.setNoiseMode(noiseMode);
         audioEngine.setNoisePeriod(noisePeriod);
+
+        // Sequencer init
+        audioEngine.setSequencerBPM(bpm);
+        audioEngine.setSequencerPattern(pattern);
+        audioEngine.onStep((step) => {
+            setCurrentStep(step);
+        });
     };
+
+    useEffect(() => {
+        if (started) {
+            audioEngine.setSequencerPattern(pattern);
+        }
+    }, [pattern, started]);
+
+    useEffect(() => {
+        if (started) {
+            audioEngine.setSequencerBPM(bpm);
+        }
+    }, [bpm, started]);
 
     const pressKey = useCallback((key: string) => {
         if (!currentKeyMap[key]) return;
@@ -572,6 +626,124 @@ export default function App() {
                                 <p className="text-center text-[10px] text-neutral-600 mt-4 uppercase">
                                     Use computer keyboard or click to play
                                 </p>
+                            </div>
+                        </div>
+                        
+                        {/* Sequencer */}
+                        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 col-span-1 lg:col-span-3">
+                            <div className="flex justify-between items-end mb-4">
+                                <h2 className="text-sm uppercase tracking-wider text-neutral-400">Step Sequencer</h2>
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] uppercase text-neutral-500">BPM</span>
+                                        <input 
+                                            type="range" 
+                                            min="60" max="240" 
+                                            value={bpm} 
+                                            onChange={(e) => setBpm(Number(e.target.value))}
+                                            className="w-24 accent-green-500" 
+                                        />
+                                        <span className="text-[10px] text-green-400 w-6">{bpm}</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => {
+                                                if (sequencerPlaying) {
+                                                    audioEngine.pauseSequencer();
+                                                    setSequencerPlaying(false);
+                                                } else {
+                                                    audioEngine.playSequencer();
+                                                    setSequencerPlaying(true);
+                                                }
+                                            }}
+                                            className={`px-3 py-1 text-[10px] rounded border transition-colors ${sequencerPlaying ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-neutral-950 text-neutral-500 border-neutral-800 hover:text-neutral-300'}`}
+                                        >
+                                            {sequencerPlaying ? 'PAUSE' : 'PLAY'}
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                audioEngine.stopSequencer();
+                                                setSequencerPlaying(false);
+                                            }}
+                                            className="px-3 py-1 text-[10px] rounded border bg-neutral-950 text-neutral-500 border-neutral-800 hover:text-neutral-300 transition-colors"
+                                        >
+                                            STOP
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-1">
+                                {(['pulse1', 'pulse2', 'triangle', 'noise'] as const).map(trackName => (
+                                    <div key={trackName} className="flex gap-1 items-center">
+                                        <div className="w-20 text-[10px] uppercase text-neutral-500 shrink-0">{trackName}</div>
+                                        <div className="flex-1 grid gap-px bg-neutral-800 p-px rounded" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
+                                            {pattern[trackName].map((step, i) => {
+                                                const isCurrent = i === currentStep;
+                                                return (
+                                                    <div 
+                                                        key={i} 
+                                                        className={`h-12 relative flex items-center justify-center cursor-pointer transition-colors
+                                                            ${step.active ? 'bg-green-500/30' : step.noteOff ? 'bg-red-500/20' : 'bg-neutral-950 hover:bg-neutral-900'}
+                                                            ${isCurrent ? 'border border-green-400' : 'border border-transparent'}
+                                                        `}
+                                                        onClick={() => {
+                                                            setPattern(prev => {
+                                                                const next = { ...prev };
+                                                                const newTrack = [...next[trackName]];
+                                                                
+                                                                if (!newTrack[i].active && !newTrack[i].noteOff) {
+                                                                    newTrack[i] = { ...newTrack[i], active: true, noteOff: false, freq: newTrack[i].freq || currentKeyMap['z']?.freq || 261.63 };
+                                                                } else if (newTrack[i].active) {
+                                                                    newTrack[i] = { ...newTrack[i], active: false, noteOff: true };
+                                                                } else {
+                                                                    newTrack[i] = { ...newTrack[i], active: false, noteOff: false };
+                                                                }
+                                                                
+                                                                next[trackName] = newTrack;
+                                                                return next;
+                                                            });
+                                                        }}
+                                                    >
+                                                        {step.active && trackName !== 'noise' && (
+                                                            <select 
+                                                                value={step.freq || ''}
+                                                                onChange={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const freq = Number(e.target.value);
+                                                                    setPattern(prev => {
+                                                                        const next = { ...prev };
+                                                                        const newTrack = [...next[trackName]];
+                                                                        newTrack[i] = { ...newTrack[i], freq };
+                                                                        next[trackName] = newTrack;
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                onClick={e => e.stopPropagation()}
+                                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                            >
+                                                                {ALL_NOTES_LIST.map((n, idx) => (
+                                                                    <option key={idx} value={n.freq}>{n.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        )}
+                                                        {step.active && trackName !== 'noise' && (
+                                                            <div className="text-[8px] pointer-events-none text-green-300 rotate-[-90deg]">
+                                                                {ALL_NOTES_LIST.find(n => n.freq === step.freq)?.name || 'C4'}
+                                                            </div>
+                                                        )}
+                                                        {step.active && trackName === 'noise' && (
+                                                            <div className="w-2 h-2 rounded-full bg-green-400 pointer-events-none" />
+                                                        )}
+                                                        {step.noteOff && (
+                                                            <div className="w-2 h-2 rounded-full bg-red-500 pointer-events-none" />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
