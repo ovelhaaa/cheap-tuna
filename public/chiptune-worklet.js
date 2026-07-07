@@ -376,6 +376,11 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
         this.triangle = new TriangleVoice();
         this.noise = new NoiseVoice();
         
+        this.pulse1Level = 1.0;
+        this.pulse2Level = 1.0;
+        this.triangleLevel = 1.0;
+        this.noiseLevel = 1.0;
+        
         this.clockAccumulator = 0.0;
         this.halfClockParity = 0;
         this.frameAccumulator = 0;
@@ -389,17 +394,20 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
         this.currentStep = 0;
         this.patternLength = 16;
         
-        this.pattern = {
-            pulse1: new Array(this.patternLength).fill(null),
-            pulse2: new Array(this.patternLength).fill(null),
-            triangle: new Array(this.patternLength).fill(null),
-            noise: new Array(this.patternLength).fill(null)
-        };
+        this.patterns = [{
+            pulse1: new Array(this.patternLength).fill({}),
+            pulse2: new Array(this.patternLength).fill({}),
+            triangle: new Array(this.patternLength).fill({}),
+            noise: new Array(this.patternLength).fill({})
+        }];
+        this.songSequence = [0];
+        this.currentSongPos = 0;
+        this.swingAmount = 0;
         
         this.updateSamplesPerStep();
         
         this.port.onmessage = (e) => {
-            const { type, voice, frequency, mode, index, decayRate, loop, playing, enabled, pattern, speed, rate, depth, envMode, attackRate, holdTime, sustainLevel, releaseRate, detune, bpm, stepPattern } = e.data;
+            const { type, voice, frequency, mode, index, decayRate, loop, playing, enabled, pattern, speed, rate, depth, envMode, attackRate, holdTime, sustainLevel, releaseRate, detune, bpm, stepPattern, patterns, sequence, swing, patternIndex, level } = e.data;
             
             if (type === 'sequencer_play') {
                 if (!this.sequencerPlaying && this.stepAccumulator === 0) {
@@ -411,8 +419,9 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
             } else if (type === 'sequencer_stop') {
                 this.sequencerPlaying = false;
                 this.currentStep = 0;
+                this.currentSongPos = 0;
                 this.stepAccumulator = 0;
-                this.port.postMessage({ type: 'step', step: 0 });
+                this.port.postMessage({ type: 'step', step: 0, songPos: 0 });
                 this.pulse1.setFrequency(0);
                 this.pulse2.setFrequency(0);
                 this.triangle.setFrequency(0);
@@ -420,9 +429,16 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
             } else if (type === 'sequencer_set_bpm') {
                 this.bpm = bpm;
                 this.updateSamplesPerStep();
+            } else if (type === 'sequencer_set_patterns') {
+                this.patterns = patterns;
+                if (this.patterns[0]) this.patternLength = this.patterns[0].pulse1.length;
+            } else if (type === 'sequencer_set_song') {
+                this.songSequence = sequence;
             } else if (type === 'sequencer_set_pattern') {
-                this.pattern = stepPattern;
+                this.patterns[patternIndex] = stepPattern;
                 this.patternLength = stepPattern.pulse1.length;
+            } else if (type === 'sequencer_set_swing') {
+                this.swingAmount = swing;
             } else if (type === 'note_on') {
                 if (voice === 'pulse1') this.pulse1.setFrequency(frequency);
                 if (voice === 'pulse2') this.pulse2.setFrequency(frequency);
@@ -471,6 +487,11 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
                     voiceObj.vibrato.rate = rate;
                     voiceObj.vibrato.depth = depth;
                 }
+            } else if (type === 'set_level') {
+                if (voice === 'pulse1') this.pulse1Level = level;
+                if (voice === 'pulse2') this.pulse2Level = level;
+                if (voice === 'triangle') this.triangleLevel = level;
+                if (voice === 'noise') this.noiseLevel = level;
             }
         };
     }
@@ -480,46 +501,41 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
     }
     
     processStep() {
-        const stepPulse1 = this.pattern.pulse1[this.currentStep];
-        if (stepPulse1) {
-            if (stepPulse1.active) {
-                if (stepPulse1.freq) this.pulse1.setFrequency(stepPulse1.freq);
-                else this.pulse1.envelope.start();
-            } else if (stepPulse1.noteOff) {
-                this.pulse1.setFrequency(0);
-            }
+        const activePattern = this.patterns[this.songSequence[this.currentSongPos]];
+        if (!activePattern) return;
+
+        const stepPulse1 = activePattern.pulse1[this.currentStep];
+        if (stepPulse1?.note !== undefined) {
+            this.pulse1.setFrequency(stepPulse1.note);
+            this.pulse1.envelope.start();
+        } else if (!stepPulse1?.tie) {
+            this.pulse1.setFrequency(0);
         }
         
-        const stepPulse2 = this.pattern.pulse2[this.currentStep];
-        if (stepPulse2) {
-            if (stepPulse2.active) {
-                if (stepPulse2.freq) this.pulse2.setFrequency(stepPulse2.freq);
-                else this.pulse2.envelope.start();
-            } else if (stepPulse2.noteOff) {
-                this.pulse2.setFrequency(0);
-            }
+        const stepPulse2 = activePattern.pulse2[this.currentStep];
+        if (stepPulse2?.note !== undefined) {
+            this.pulse2.setFrequency(stepPulse2.note);
+            this.pulse2.envelope.start();
+        } else if (!stepPulse2?.tie) {
+            this.pulse2.setFrequency(0);
         }
         
-        const stepTriangle = this.pattern.triangle[this.currentStep];
-        if (stepTriangle) {
-            if (stepTriangle.active) {
-                if (stepTriangle.freq) this.triangle.setFrequency(stepTriangle.freq);
-                else this.triangle.enabled = true; // Triangle doesn't have an envelope right now, but just in case
-            } else if (stepTriangle.noteOff) {
-                this.triangle.setFrequency(0);
-            }
+        const stepTriangle = activePattern.triangle[this.currentStep];
+        if (stepTriangle?.note !== undefined) {
+            this.triangle.setFrequency(stepTriangle.note);
+            this.triangle.enabled = true; // Triangle doesn't have an envelope right now, but just in case
+        } else if (!stepTriangle?.tie) {
+            this.triangle.setFrequency(0);
         }
         
-        const stepNoise = this.pattern.noise[this.currentStep];
-        if (stepNoise) {
-            if (stepNoise.active) {
-                this.noise.setPlaying(true);
-            } else if (stepNoise.noteOff) {
-                this.noise.setPlaying(false);
-            }
+        const stepNoise = activePattern.noise[this.currentStep];
+        if (stepNoise?.note !== undefined) {
+            this.noise.setPlaying(true);
+        } else if (!stepNoise?.tie) {
+            this.noise.setPlaying(false);
         }
         
-        this.port.postMessage({ type: 'step', step: this.currentStep });
+        this.port.postMessage({ type: 'step', step: this.currentStep, songPos: this.currentSongPos });
     }
 
     process(inputs, outputs, parameters) {
@@ -533,9 +549,20 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
 
         for (let i = 0; i < channel.length; i++) {
             if (this.sequencerPlaying) {
-                if (this.stepAccumulator >= this.samplesPerStep) {
-                    this.stepAccumulator -= this.samplesPerStep;
-                    this.currentStep = (this.currentStep + 1) % this.patternLength;
+                let currentSamplesPerStep = this.samplesPerStep;
+                if (this.swingAmount > 0) {
+                    currentSamplesPerStep = (this.currentStep % 2 === 0) 
+                        ? this.samplesPerStep * (1 + this.swingAmount * 0.5) 
+                        : this.samplesPerStep * (1 - this.swingAmount * 0.5); 
+                }
+
+                if (this.stepAccumulator >= currentSamplesPerStep) {
+                    this.stepAccumulator -= currentSamplesPerStep;
+                    this.currentStep++;
+                    if (this.currentStep >= this.patternLength) {
+                        this.currentStep = 0;
+                        this.currentSongPos = (this.currentSongPos + 1) % this.songSequence.length;
+                    }
                     this.processStep();
                 }
                 this.stepAccumulator++;
@@ -568,10 +595,10 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
                 this.frameAccumulator -= this.FRAME_COUNTER_PERIOD;
             }
 
-            let sample = this.pulse1.getSample() + 
-                         this.pulse2.getSample() + 
-                         this.triangle.getSample() + 
-                         this.noise.getSample();
+            let sample = this.pulse1.getSample() * this.pulse1Level + 
+                         this.pulse2.getSample() * this.pulse2Level + 
+                         this.triangle.getSample() * this.triangleLevel + 
+                         this.noise.getSample() * this.noiseLevel;
                          
             // Normalization clipping to avoid exceeding ±1.0
             if (sample > 1.0) sample = 1.0;

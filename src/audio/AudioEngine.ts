@@ -2,6 +2,7 @@ export class AudioEngine {
     private context: AudioContext | null = null;
     private workletNode: AudioWorkletNode | null = null;
     private analyser: AnalyserNode | null = null;
+    private filter: BiquadFilterNode | null = null;
     private initialized = false;
 
     async init() {
@@ -13,10 +14,16 @@ export class AudioEngine {
             await this.context.audioWorklet.addModule('/chiptune-worklet.js');
             this.workletNode = new AudioWorkletNode(this.context, 'chiptune-processor');
             
+            this.filter = this.context.createBiquadFilter();
+            this.filter.type = 'lowpass';
+            this.filter.frequency.setValueAtTime(20000, this.context.currentTime);
+            this.filter.Q.setValueAtTime(1, this.context.currentTime);
+            
             this.analyser = this.context.createAnalyser();
             this.analyser.fftSize = 2048;
             
-            this.workletNode.connect(this.analyser);
+            this.workletNode.connect(this.filter);
+            this.filter.connect(this.analyser);
             this.analyser.connect(this.context.destination);
             
             this.initialized = true;
@@ -86,6 +93,23 @@ export class AudioEngine {
         this.workletNode.port.postMessage({ type: 'set_vibrato', voice, enabled, rate, depth });
     }
 
+    setFilterCutoff(freq: number) {
+        if (!this.filter || !this.context) return;
+        const clampedFreq = Math.max(100, Math.min(20000, freq));
+        this.filter.frequency.setTargetAtTime(clampedFreq, this.context.currentTime, 0.01);
+    }
+
+    setFilterResonance(q: number) {
+        if (!this.filter || !this.context) return;
+        const clampedQ = Math.max(0.0001, Math.min(25, q));
+        this.filter.Q.setTargetAtTime(clampedQ, this.context.currentTime, 0.01);
+    }
+
+    setVoiceLevel(voice: string, level: number) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'set_level', voice, level });
+    }
+
     // Sequencer methods
     playSequencer() {
         if (!this.workletNode) return;
@@ -107,17 +131,32 @@ export class AudioEngine {
         this.workletNode.port.postMessage({ type: 'sequencer_set_bpm', bpm });
     }
 
-    setSequencerPattern(stepPattern: any) {
+    setSequencerPatterns(patterns: any[]) {
         if (!this.workletNode) return;
-        this.workletNode.port.postMessage({ type: 'sequencer_set_pattern', stepPattern });
+        this.workletNode.port.postMessage({ type: 'sequencer_set_patterns', patterns });
     }
 
-    onStep(callback: (step: number) => void) {
+    setSequencerSong(sequence: number[]) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_set_song', sequence });
+    }
+
+    setSequencerSwing(swing: number) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_set_swing', swing });
+    }
+
+    setSequencerPattern(patternIndex: number, stepPattern: any) {
+        if (!this.workletNode) return;
+        this.workletNode.port.postMessage({ type: 'sequencer_set_pattern', patternIndex, stepPattern });
+    }
+
+    onStep(callback: (step: number, songPos: number) => void) {
         if (!this.workletNode) return;
         // Listen to port messages for step
         this.workletNode.port.addEventListener('message', (e) => {
             if (e.data.type === 'step') {
-                callback(e.data.step);
+                callback(e.data.step, e.data.songPos);
             }
         });
         this.workletNode.port.start();

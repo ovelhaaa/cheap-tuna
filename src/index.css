@@ -1,1 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;800&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  
+  --color-amber-primary: #ff6b00;
+  --color-amber-dark: #cc5600;
+  --color-amber-dim: #7a3a0e;
+  --color-amber-dimmer: #3d1c05;
+  --color-amber-ghost: #231003;
+  
+  --color-vintage-bg: #111111;
+  --color-vintage-panel: #1a1a1a;
+  --color-vintage-surface: #242424;
+  --color-vintage-border: #333333;
+  
+  --color-vintage-text: #e0e0e0;
+  --color-vintage-text-dim: rgba(224, 224, 224, 0.4);
+}
+
+body {
+  background-color: var(--color-vintage-bg);
+  color: var(--color-vintage-text);
+  font-family: var(--font-mono);
+}
+
+/* Custom Range Input (Fader style) */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+input[type=range]:focus {
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 20px;
+  width: 10px;
+  border-radius: 2px;
+  background: var(--color-amber-primary);
+  cursor: pointer;
+  margin-top: -8px;
+  box-shadow: 0 0 5px rgba(255, 140, 26, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.3), inset 0 -1px 2px rgba(0, 0, 0, 0.5);
+  border: 1px solid #000;
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: var(--color-vintage-border);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+input[type=range]:focus::-webkit-slider-runnable-track {
+  background: var(--color-amber-dimmer);
+}
+
+input[type=range]::-moz-range-thumb {
+  height: 20px;
+  width: 10px;
+  border-radius: 2px;
+  background: var(--color-amber-primary);
+  cursor: pointer;
+  box-shadow: 0 0 5px rgba(255, 140, 26, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.3), inset 0 -1px 2px rgba(0, 0, 0, 0.5);
+  border: 1px solid #000;
+}
+
+input[type=range]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: var(--color-vintage-border);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Hatched pattern for tied notes */
+.bg-hatched {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-amber-dimmer),
+    var(--color-amber-dimmer) 2px,
+    var(--color-vintage-panel) 2px,
+    var(--color-vintage-panel) 4px
+  );
+}
+
+/* Hardware button styling */
+.btn-hardware {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.btn-hardware:active {
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+  transform: translateY(1px);
+}
+
+/* Hardware details */
+.module-panel {
+  background: linear-gradient(180deg, var(--color-vintage-surface) 0%, var(--color-vintage-panel) 100%);
+  position: relative;
+  box-shadow: 
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    inset 0 -1px 0 rgba(0,0,0,0.5),
+    0 4px 6px -1px rgba(0,0,0,0.5);
+  border: 1px solid #111;
+}
+
+.module-panel::before, .module-panel::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #333;
+  border-radius: 50%;
+  box-shadow: inset 1px 1px 2px rgba(0,0,0,0.8), inset -1px -1px 1px rgba(255,255,255,0.2);
+}
+
+.module-panel::before { top: 6px; left: 6px; }
+.module-panel::after { top: 6px; right: 6px; }
+
+.module-panel-bottom-screws::before, .module-panel-bottom-screws::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #333;
+  border-radius: 50%;
+  box-shadow: inset 1px 1px 2px rgba(0,0,0,0.8), inset -1px -1px 1px rgba(255,255,255,0.2);
+}
+.module-panel-bottom-screws::before { bottom: 6px; left: 6px; }
+.module-panel-bottom-screws::after { bottom: 6px; right: 6px; }
+
+.tape-slot {
+  background: #080808;
+  border: 2px solid #1a1a1a;
+  border-top-color: #050505;
+  border-left-color: #050505;
+  box-shadow: inset 0 4px 8px rgba(0,0,0,0.8);
+  border-radius: 2px;
+}
