@@ -1,90 +1,45 @@
+import { PresetManager } from './components/PresetManager';
+import { PulseControls, VibratoControls } from './components/VoicePanel';
+import { Oscilloscope } from './components/Oscilloscope';
+import { BASE_NOTES, ALL_NOTES_LIST, ARP_PATTERNS } from './utils/noteUtils';
+import { VoiceType, ArpConfig, VibratoConfig, PulseConfig, TriangleConfig, StepData, TrackPattern, StepPattern } from './audio/types';
 import { useState, useEffect, ChangeEvent, useCallback, useMemo, useRef, MouseEvent, TouchEvent } from 'react';
 import { audioEngine } from './audio/AudioEngine';
-import { Volume2, Power, Activity, Disc3, Download, Upload, Dices } from 'lucide-react';
+import { Volume2, Power, Activity, Disc3, Download, Upload, Dices, Copy, ClipboardPaste } from 'lucide-react';
 import { downloadJson, loadJson } from './utils/presets';
 
-const BASE_NOTES = [
-    { key: 'z', noteName: 'C', offset: 0, isBlack: false },
-    { key: 's', noteName: 'C#', offset: 1, isBlack: true },
-    { key: 'x', noteName: 'D', offset: 2, isBlack: false },
-    { key: 'd', noteName: 'D#', offset: 3, isBlack: true },
-    { key: 'c', noteName: 'E', offset: 4, isBlack: false },
-    { key: 'v', noteName: 'F', offset: 5, isBlack: false },
-    { key: 'g', noteName: 'F#', offset: 6, isBlack: true },
-    { key: 'b', noteName: 'G', offset: 7, isBlack: false },
-    { key: 'h', noteName: 'G#', offset: 8, isBlack: true },
-    { key: 'n', noteName: 'A', offset: 9, isBlack: false },
-    { key: 'j', noteName: 'A#', offset: 10, isBlack: true },
-    { key: 'm', noteName: 'B', offset: 11, isBlack: false },
-    { key: ',', noteName: 'C', offset: 12, isBlack: false }
-];
 
-const ALL_NOTES_LIST = Array.from({ length: 12 * 7 }, (_, i) => {
-    const octave = Math.floor(i / 12) + 1;
-    const note = BASE_NOTES[i % 12];
-    const a4 = 440;
-    const noteIndex = (octave - 4) * 12 + note.offset;
-    const freq = a4 * Math.pow(2, (noteIndex - 9) / 12);
-    return { name: `${note.noteName}${octave}`, freq };
-});
 
-type VoiceType = 'pulse1' | 'pulse2' | 'triangle' | 'noise';
 
-const ARP_PATTERNS = [
-    { name: 'Major Triad', value: [0, 4, 7] },
-    { name: 'Minor Triad', value: [0, 3, 7] },
-    { name: 'Octave Jump', value: [0, 12] },
-    { name: 'Octave Arp', value: [0, 12, 24] },
-    { name: 'Sus4', value: [0, 5, 7] },
-];
 
-interface ArpConfig {
-    enabled: boolean;
-    pattern: number[];
-    speed: number;
-}
 
-interface VibratoConfig {
-    enabled: boolean;
-    rate: number;
-    depth: number;
-}
 
-interface PulseConfig {
-    duty: number;
-    decay: number; // For backward compatibility / simple UI
-    loop: boolean;
-    envMode: 'AD' | 'AHDS';
-    attackRate: number;
-    holdTime: number;
-    sustainLevel: number;
-    releaseRate: number;
-    detune: number;
-    arp: ArpConfig;
-    vibrato: VibratoConfig;
-}
 
-interface TriangleConfig {
-    vibrato: VibratoConfig;
-}
 
-type StepData = {
-    note?: number;
-    tie?: boolean;
-};
 
-type TrackPattern = StepData[];
 
-type StepPattern = {
-    pulse1: TrackPattern;
-    pulse2: TrackPattern;
-    triangle: TrackPattern;
-    noise: TrackPattern;
-};
+
+
+
+
+
+
+
+
+
+
+
 
 
 export default function App() {
     const [started, setStarted] = useState(false);
+    const [toast, setToast] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+
+    const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+        setToast({message, type});
+        setTimeout(() => setToast(null), 3000);
+    };
+
     const [activeVoice, setActiveVoice] = useState<VoiceType>('pulse1');
     const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
     const [octave, setOctave] = useState(4);
@@ -106,6 +61,7 @@ export default function App() {
     }]);
     const [songSequence, setSongSequence] = useState<number[]>([0]);
     const [currentPatternIndex, setCurrentPatternIndex] = useState(0);
+    const [clipboardPattern, setClipboardPattern] = useState<StepPattern | null>(null);
 
     const [editingNote, setEditingNote] = useState<{track: keyof StepPattern, step: number} | null>(null);
 
@@ -547,7 +503,7 @@ export default function App() {
         try {
             const data = await loadJson(file);
             if (data?.type !== 'cheap-tuna-timbre') {
-                alert('Invalid timbre preset file');
+                showToast('Invalid timbre preset file');
                 return;
             }
             const { voice, params } = data;
@@ -566,7 +522,7 @@ export default function App() {
                 }
             }
         } catch (err: any) {
-            alert(err.message || 'Failed to load timbre');
+            showToast(err.message || 'Failed to load timbre');
         }
         e.target.value = ''; // reset
     };
@@ -589,7 +545,7 @@ export default function App() {
         try {
             const data = await loadJson(file);
             if (data?.type !== 'cheap-tuna-song') {
-                alert('Invalid song preset file');
+                showToast('Invalid song preset file');
                 return;
             }
             if (confirm('Loading a song will overwrite your current patterns and sequence. Continue?')) {
@@ -604,7 +560,7 @@ export default function App() {
                 audioEngine.setSequencerSong(data.songSequence || [0]);
             }
         } catch (err: any) {
-            alert(err.message || 'Failed to load song');
+            showToast(err.message || 'Failed to load song');
         }
         e.target.value = ''; // reset
     };
@@ -682,67 +638,17 @@ export default function App() {
         });
     }, [octave, currentPatternIndex]);
 
-    const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    useEffect(() => {
-        if (!started) return;
-        
-        let animationId: number;
-        
-        const draw = () => {
-            const canvas = canvasRef.current;
-            const analyser = audioEngine.getAnalyser();
-            if (!canvas || !analyser) {
-                animationId = requestAnimationFrame(draw);
-                return;
-            }
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            analyser.getByteTimeDomainData(dataArray);
-
-            ctx.fillStyle = 'rgb(10, 10, 10)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#ff8c1a'; // green-400
-            ctx.beginPath();
-
-            const sliceWidth = canvas.width * 1.0 / bufferLength;
-            let x = 0;
-
-            for (let i = 0; i < bufferLength; i++) {
-                const v = dataArray[i] / 128.0;
-                const y = v * canvas.height / 2;
-
-                if (i === 0) {
-                    ctx.moveTo(x, y);
-                } else {
-                    ctx.lineTo(x, y);
-                }
-
-                x += sliceWidth;
-            }
-
-            ctx.lineTo(canvas.width, canvas.height / 2);
-            ctx.stroke();
-
-            animationId = requestAnimationFrame(draw);
-        };
-
-        draw();
-
-        return () => {
-            cancelAnimationFrame(animationId);
-        };
-    }, [started]);
 
     return (
         <div className="min-h-screen bg-vintage-bg text-vintage-text flex flex-col items-center py-4 px-2 sm:py-12 sm:px-4 font-mono">
-            <header className="mb-4 pb-2 sm:mb-8 sm:pb-4 border-b-4 border-amber-primary flex flex-col sm:flex-row justify-between items-center w-full max-w-4xl gap-2">
+            
+            {toast && (
+                <div className={`fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded shadow-lg z-50 transition-opacity ${toast.type === 'error' ? 'bg-red-900/90 text-red-100 border border-red-500' : 'bg-green-900/90 text-green-100 border border-green-500'}`}>
+                    {toast.message}
+                </div>
+            )}
+<header className="mb-4 pb-2 sm:mb-8 sm:pb-4 border-b-4 border-amber-primary flex flex-col sm:flex-row justify-between items-center w-full max-w-4xl gap-2">
                 <div className="text-2xl font-extrabold tracking-tight text-vintage-text uppercase">8-BIT SYNTH // P004</div>
                 <div className="text-xs tracking-widest text-amber-primary font-bold">SYSTEM STATUS: ONLINE</div>
             </header>
@@ -759,31 +665,17 @@ export default function App() {
                 <div className="w-full max-w-4xl flex flex-col gap-3 sm:gap-3 sm:gap-6">
                     <div className="module-panel p-3 sm:p-4 pt-3 sm:pt-4 rounded space-y-4 sm:space-y-6 sm:space-y-4 sm:space-y-6">
                         
-                        <div className="tape-slot p-4 rounded space-y-3 mb-4">
-                            <h3 className="text-xs uppercase text-vintage-text-dim font-bold tracking-wider">Timbre Presets (Active Voice)</h3>
-                            <div className="flex items-center gap-2 ">
-                                <input 
-                                    type="text" 
-                                    value={timbreFilename} 
-                                    onChange={e => setTimbreFilename(e.target.value)}
-                                    placeholder={`timbre-${activeVoice}`}
-                                    className="bg-vintage-panel border border-vintage-border text-xs rounded px-2 py-1.5 flex-1 focus:outline-none focus:border-amber-primary/50 text-vintage-text"
-                                />
-                                <button 
-                                    onClick={handleExportTimbre}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-vintage-surface hover:bg-vintage-border text-amber-primary text-xs rounded border border-vintage-border transition-colors btn-hardware"
-                                    title="Export Timbre"
-                                >
-                                    <Download className="w-3.5 h-3.5" />
-                                    Save
-                                </button>
-                                <label className="flex items-center gap-1.5 px-3 py-1.5 bg-vintage-surface hover:bg-vintage-border text-amber-primary text-xs rounded border border-vintage-border transition-colors cursor-pointer">
-                                    <Upload className="w-3.5 h-3.5" />
-                                    Load
-                                    <input type="file" accept=".json" onChange={handleImportTimbre} className="hidden" />
-                                </label>
-                            </div>
-                        </div>
+                        <PresetManager 
+                            activeVoice={activeVoice} 
+                            timbreFilename={timbreFilename} 
+                            setTimbreFilename={setTimbreFilename} 
+                            songFilename={songFilename} 
+                            setSongFilename={setSongFilename} 
+                            handleExportTimbre={handleExportTimbre} 
+                            handleImportTimbre={handleImportTimbre} 
+                            handleExportSong={handleExportSong} 
+                            handleImportSong={handleImportSong} 
+                        />
 
                         <div className="space-y-4 sm:space-y-6">
                             {/* Voice Tabs */}
@@ -1082,14 +974,7 @@ export default function App() {
                                 </div>
                             </div>
                             
-                            <div className="w-full bg-vintage-bg border border-vintage-border rounded-xl p-2 overflow-hidden mb-4">
-                                <canvas 
-                                    ref={canvasRef} 
-                                    width={800} 
-                                    height={80} 
-                                    className="w-full h-20 rounded"
-                                />
-                            </div>
+                            <Oscilloscope started={started} />
 
                             <div className="bg-vintage-bg p-2 sm:p-4 rounded border border-vintage-border select-none touch-none overflow-x-auto">
                                 <div className="flex relative h-32 gap-1 min-w-[600px] sm:min-w-full">
@@ -1254,6 +1139,36 @@ export default function App() {
                                         <span className="text-[10px] uppercase text-vintage-text-dim mb-1">Functions</span>
                                         <div className="flex gap-1 items-center bg-vintage-bg p-1 rounded border border-vintage-border h-12">
                                             <button 
+                                                onClick={() => {
+                                                    setClipboardPattern(JSON.parse(JSON.stringify(patterns[currentPatternIndex])));
+                                                    showToast('Pattern copied', 'success');
+                                                }}
+                                                className="flex items-center gap-1.5 px-3 bg-vintage-panel hover:bg-vintage-surface text-amber-primary text-[10px] font-bold rounded border border-vintage-border transition-colors btn-hardware h-10 shrink-0"
+                                                title="Copy Pattern"
+                                            >
+                                                <Copy className="w-3.5 h-3.5" />
+                                                Copy
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    if (!clipboardPattern) return;
+                                                    setPatterns(prev => {
+                                                        const next = [...prev];
+                                                        const pat = JSON.parse(JSON.stringify(clipboardPattern));
+                                                        next[currentPatternIndex] = pat;
+                                                        audioEngine.setSequencerPattern(currentPatternIndex, pat);
+                                                        return next;
+                                                    });
+                                                    showToast('Pattern pasted', 'success');
+                                                }}
+                                                disabled={!clipboardPattern}
+                                                className={`flex items-center gap-1.5 px-3 bg-vintage-panel ${clipboardPattern ? 'hover:bg-vintage-surface text-amber-primary cursor-pointer' : 'opacity-50 text-vintage-text-dim cursor-not-allowed'} text-[10px] font-bold rounded border border-vintage-border transition-colors btn-hardware h-10 shrink-0`}
+                                                title="Paste Pattern"
+                                            >
+                                                <ClipboardPaste className="w-3.5 h-3.5" />
+                                                Paste
+                                            </button>
+                                            <button 
                                                 onClick={handleRandomizePattern}
                                                 className="flex items-center gap-1.5 px-3 bg-vintage-panel hover:bg-vintage-surface text-amber-primary text-[10px] font-bold rounded border border-vintage-border transition-colors btn-hardware h-10 shrink-0"
                                                 title="Randomize Selected Pattern"
@@ -1266,31 +1181,7 @@ export default function App() {
                                 </div>
 
                                 <div className="flex flex-col gap-3 w-full xl:w-auto shrink-0">
-                                    <div className="flex flex-col w-full">
-                                        <span className="text-[10px] uppercase text-vintage-text-dim mb-1">Save / Load Song</span>
-                                        <div className="flex items-center gap-2 tape-slot p-1 px-3 rounded border border-vintage-border bg-vintage-bg h-12 w-full">
-                                            <input 
-                                                type="text" 
-                                                value={songFilename} 
-                                                onChange={e => setSongFilename(e.target.value)}
-                                                placeholder="song-preset"
-                                                className="bg-vintage-bg border border-vintage-border text-[10px] rounded px-2 flex-1 focus:outline-none focus:border-amber-primary/50 text-vintage-text h-10 font-mono min-w-0"
-                                            />
-                                            <button 
-                                                onClick={handleExportSong}
-                                                className="flex items-center gap-1.5 px-2 bg-vintage-panel hover:bg-vintage-surface text-amber-primary text-[10px] font-bold rounded border border-vintage-border transition-colors btn-hardware h-10 shrink-0"
-                                                title="Save Song Preset"
-                                            >
-                                                <Download className="w-3.5 h-3.5" />
-                                                Save
-                                            </button>
-                                            <label className="flex items-center gap-1.5 px-2 bg-vintage-panel hover:bg-vintage-surface text-amber-primary text-[10px] font-bold rounded border border-vintage-border transition-colors cursor-pointer h-10 shrink-0">
-                                                <Upload className="w-3.5 h-3.5" />
-                                                Load
-                                                <input type="file" accept=".json" onChange={handleImportSong} className="hidden" />
-                                            </label>
-                                        </div>
-                                    </div>
+                                    
 
                                     <div className="flex items-center justify-between gap-2 bg-vintage-bg p-1.5 rounded border border-vintage-border w-full">
                                         <div className="flex items-center gap-1 sm:gap-2">
@@ -1467,249 +1358,4 @@ export default function App() {
     );
 }
 
-function PulseControls({ 
-    title, 
-    config, 
-    onChange, 
-    isActive, 
-    onSelect 
-}: { 
-    title: string; 
-    config: PulseConfig; 
-    onChange: (u: Partial<PulseConfig>) => void;
-    isActive: boolean;
-    onSelect: () => void;
-}) {
-    return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h2 className="text-sm uppercase tracking-wider text-amber-primary font-bold">{title}</h2>
-                <button
-                    onClick={onSelect}
-                    className={`px-3 py-1 text-xs rounded border transition-colors ${
-                        isActive 
-                        ? 'bg-amber-dimmer text-amber-primary border-amber-primary/50' 
-                        : 'bg-vintage-bg text-vintage-text-dim border-vintage-border hover:border-vintage-border'
-                    }`}
-                >
-                    {isActive ? 'Control: Active' : 'Select'}
-                </button>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                <div className="space-y-2">
-                    <label className="text-xs text-vintage-text-dim">Duty Cycle</label>
-                    <div className="grid grid-cols-3 gap-1">
-                        {[{v: 0, l: '12%'}, {v: 1, l: '25%'}, {v: 2, l: '50%'}].map(d => (
-                            <button
-                                key={d.v}
-                                onClick={() => onChange({ duty: d.v })}
-                                className={`py-1 text-xs rounded border transition-colors ${
-                                    config.duty === d.v ? 'bg-vintage-surface text-amber-primary border-amber-primary/50' : 'bg-vintage-bg text-vintage-text-dim border-vintage-border'
-                                }`}
-                            >
-                                {d.l}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                <div className="space-y-2">
-                    <div className="flex justify-between">
-                        <label className="text-xs text-vintage-text-dim">Detune</label>
-                        <span className="text-xs text-amber-primary">{config.detune}</span>
-                    </div>
-                    <input 
-                        type="range" min="-10" max="10" 
-                        value={config.detune}
-                        onChange={(e) => onChange({ detune: parseInt(e.target.value) })}
-                        className="w-full h-10 accent-amber-primary cursor-pointer"
-                    />
-                </div>
-            </div>
-            
-            <div className="space-y-2 pt-2 border-t border-vintage-border">
-                <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-vintage-text-dim uppercase">Quantized Envelope</label>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => onChange({ envMode: 'AD' })}
-                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${config.envMode === 'AD' ? 'bg-vintage-surface text-amber-primary border-amber-primary/50' : 'bg-vintage-bg text-vintage-text-dim border-vintage-border'}`}
-                        >
-                            AD
-                        </button>
-                        <button
-                            onClick={() => onChange({ envMode: 'AHDS' })}
-                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${config.envMode === 'AHDS' ? 'bg-vintage-surface text-amber-primary border-amber-primary/50' : 'bg-vintage-bg text-vintage-text-dim border-vintage-border'}`}
-                        >
-                            AHDS
-                        </button>
-                        <label className="flex items-center gap-1 cursor-pointer ml-2">
-                            <input type="checkbox" checked={config.loop} onChange={e => onChange({ loop: e.target.checked })} className="accent-amber-primary rounded bg-vintage-panel border-vintage-border" />
-                            <span className="text-[10px] text-vintage-text-dim">Loop</span>
-                        </label>
-                    </div>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
-                    <div className="flex flex-col">
-                        <div className="flex justify-between">
-                            <span className="text-[10px] text-vintage-text-dim">Attack</span>
-                            <span className="text-[10px] text-amber-primary">{config.attackRate}</span>
-                        </div>
-                        <input 
-                            type="range" min="0" max="15" value={config.attackRate} 
-                            onChange={e => onChange({ attackRate: parseInt(e.target.value) })} 
-                            className="w-full h-10 accent-amber-primary cursor-pointer" 
-                            
-                        />
-                    </div>
-                    {config.envMode === 'AHDS' && (
-                        <div className="flex flex-col">
-                            <div className="flex justify-between">
-                                <span className="text-[10px] text-vintage-text-dim">Hold</span>
-                                <span className="text-[10px] text-amber-primary">{config.holdTime}</span>
-                            </div>
-                            <input 
-                                type="range" min="0" max="60" value={config.holdTime} 
-                                onChange={e => onChange({ holdTime: parseInt(e.target.value) })} 
-                                className="w-full h-10 accent-amber-primary cursor-pointer" 
-                            />
-                        </div>
-                    )}
-                    <div className="flex flex-col">
-                        <div className="flex justify-between">
-                            <span className="text-[10px] text-vintage-text-dim">Decay</span>
-                            <span className="text-[10px] text-amber-primary">{config.decay}</span>
-                        </div>
-                        <input 
-                            type="range" min="1" max="15" value={config.decay} 
-                            onChange={e => onChange({ decay: parseInt(e.target.value) })} 
-                            className="w-full h-10 accent-amber-primary cursor-pointer" 
-                        />
-                    </div>
-                    {config.envMode === 'AHDS' && (
-                        <>
-                            <div className="flex flex-col">
-                                <div className="flex justify-between">
-                                    <span className="text-[10px] text-vintage-text-dim">Sustain</span>
-                                    <span className="text-[10px] text-amber-primary">{config.sustainLevel}</span>
-                                </div>
-                                <input 
-                                    type="range" min="0" max="15" value={config.sustainLevel} 
-                                    onChange={e => onChange({ sustainLevel: parseInt(e.target.value) })} 
-                                    className="w-full h-10 accent-amber-primary cursor-pointer" 
-                                    
-                                />
-                            </div>
-                            <div className="flex flex-col">
-                                <div className="flex justify-between">
-                                    <span className="text-[10px] text-vintage-text-dim">Release</span>
-                                    <span className="text-[10px] text-amber-primary">{config.releaseRate}</span>
-                                </div>
-                                <input 
-                                    type="range" min="1" max="15" value={config.releaseRate} 
-                                    onChange={e => onChange({ releaseRate: parseInt(e.target.value) })} 
-                                    className="w-full h-10 accent-amber-primary cursor-pointer" 
-                                    
-                                />
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
-            
-            <div className="space-y-2 pt-2 border-t border-vintage-border">
-                <div className="flex items-center justify-between">
-                    <label className="text-xs text-vintage-text-dim uppercase">Arpeggiator</label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input 
-                            type="checkbox" 
-                            checked={config.arp.enabled}
-                            onChange={(e) => onChange({ arp: { ...config.arp, enabled: e.target.checked } })}
-                            className="accent-amber-primary rounded bg-vintage-panel border-vintage-border"
-                        />
-                        <span className="text-xs text-vintage-text-dim">Enable</span>
-                    </label>
-                </div>
-                {config.arp.enabled && (
-                    <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                        <select 
-                            value={JSON.stringify(config.arp.pattern)}
-                            onChange={(e) => onChange({ arp: { ...config.arp, pattern: JSON.parse(e.target.value) } })}
-                            className="bg-vintage-bg border border-vintage-border rounded px-2 py-1 text-xs text-vintage-text"
-                            
-                        >
-                            {ARP_PATTERNS.map(p => (
-                                <option key={p.name} value={JSON.stringify(p.value)}>{p.name}</option>
-                            ))}
-                        </select>
-                        <div className="flex flex-col">
-                            <div className="flex justify-between">
-                                <span className="text-[10px] text-vintage-text-dim">Speed</span>
-                                <span className="text-[10px] text-amber-primary">{config.arp.speed} Hz</span>
-                            </div>
-                            <input 
-                                type="range" min="10" max="60" step="1"
-                                value={config.arp.speed}
-                                onChange={(e) => onChange({ arp: { ...config.arp, speed: parseInt(e.target.value) } })}
-                                className="w-full h-10 accent-amber-primary cursor-pointer"
-                                
-                            />
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <VibratoControls config={config.vibrato} onChange={(v) => onChange({ vibrato: v })} />
-        </div>
-    );
-}
-
-function VibratoControls({ config, onChange }: { config: VibratoConfig, onChange: (u: VibratoConfig) => void }) {
-    return (
-        <div className="space-y-2 pt-2 border-t border-vintage-border">
-            <div className="flex items-center justify-between">
-                <label className="text-xs text-vintage-text-dim uppercase">Vibrato</label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                        type="checkbox" 
-                        checked={config.enabled}
-                        onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
-                        className="accent-amber-primary rounded bg-vintage-panel border-vintage-border"
-                    />
-                    <span className="text-xs text-vintage-text-dim">Enable</span>
-                </label>
-            </div>
-            {config.enabled && (
-                <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                    <div className="flex flex-col">
-                        <div className="flex justify-between">
-                            <span className="text-[10px] text-vintage-text-dim">Rate</span>
-                            <span className="text-[10px] text-amber-primary">{config.rate} Hz</span>
-                        </div>
-                        <input 
-                            type="range" min="1" max="12" step="0.5"
-                            value={config.rate}
-                            onChange={(e) => onChange({ ...config, rate: parseFloat(e.target.value) })}
-                            className="w-full h-10 accent-amber-primary cursor-pointer"
-                            
-                        />
-                    </div>
-                    <div className="flex flex-col">
-                        <div className="flex justify-between">
-                            <span className="text-[10px] text-vintage-text-dim">Depth</span>
-                            <span className="text-[10px] text-amber-primary">{config.depth} Steps</span>
-                        </div>
-                        <input 
-                            type="range" min="1" max="8" step="1"
-                            value={config.depth}
-                            onChange={(e) => onChange({ ...config, depth: parseInt(e.target.value) })}
-                            className="w-full h-10 accent-amber-primary cursor-pointer"
-                            
-                        />
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}

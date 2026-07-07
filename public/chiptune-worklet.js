@@ -3,6 +3,11 @@ const CPU_CLOCK = 1789773; // NES CPU clock base
 // NES Noise periods (NTSC)
 const NOISE_PERIODS = [4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068];
 
+
+// =========================================
+// COMPONENTS class Arpeggiator EFFECTS
+// =========================================
+
 class Arpeggiator {
     constructor() {
         this.enabled = false;
@@ -367,6 +372,11 @@ class NoiseVoice {
         return output ? 0.15 : 0.0;
     }
 }
+
+
+// =========================================
+// MAIN WORKLET PROCESSOR
+// =========================================
 
 class ChiptuneProcessor extends AudioWorkletProcessor {
     constructor() {

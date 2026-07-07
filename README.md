@@ -1,20 +1,32 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# 8-Bit Synth // P004
 
-# Run and deploy your AI Studio app
+A web-based Chiptune Synthesizer and Step Sequencer heavily inspired by classic 8-bit sound chips (like the NES APU). Built with React and Web Audio API (AudioWorklet).
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/3a5e7f3d-1ade-41bb-ac99-e986a8b6964c
+- **4-Voice Engine**:
+  - **Pulse 1 & Pulse 2**: Variable duty cycle (12.5%, 25%, 50%, 75%), AD/AHDS envelope generators, detune, vibrato, and an arpeggiator.
+  - **Triangle**: Classic pseudo-triangle wave with vibrato support.
+  - **Noise**: Long (white) and Short (metallic) noise generation with variable period.
+- **Polyphony Mode**: Play Pulse 1 and Pulse 2 polyphonically from the keyboard.
+- **16-Step Sequencer**: Full piano roll grid with note ties, adjustable BPM, and swing amount. 
+- **Song Mode**: Chain multiple sequencer patterns together.
+- **Randomize Sequence**: Generates pseudo-random musical sequences based on minor pentatonic scales.
+- **Preset Management**: Export and import timbre presets (for individual voices) and full song sequences in JSON format.
+- **Live Keyboard**: Play the synthesizer using your computer keyboard or the on-screen keys, complete with MIDI keyboard support via the Web MIDI API.
+- **Master Mixer & Filter**: Global volume control for each voice and a lowpass filter.
+- **Oscilloscope**: Real-time visual feedback of the output waveform.
 
-## Run Locally
+## Tech Stack
 
-**Prerequisites:**  Node.js
+- **React 19**
+- **TypeScript**
+- **Vite**
+- **Tailwind CSS v4**
+- **Web Audio API**: Uses `AudioWorkletNode` for sample-accurate, glitch-free audio synthesis running on a separate thread.
 
+## Running Locally
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Install dependencies: `npm install`
+2. Start development server: `npm run dev`
+3. Build for production: `npm run build`

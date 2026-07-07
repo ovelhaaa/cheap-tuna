@@ -1,0 +1,301 @@
+                        {/* Sequencer */}
+                        <div className="module-panel p-3 sm:p-4 rounded col-span-1 lg:col-span-3">
+                            <div className="flex flex-col md:flex-row md:justify-between items-start md:items-end gap-2 sm:gap-4 mb-4">
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-3">
+                                        <h2 className="text-sm uppercase tracking-wider text-vintage-text-dim">Step Sequencer</h2>
+                                        {editingNote && (
+                                            <span className="text-[10px] uppercase bg-amber-dimmer text-amber-primary px-2 py-0.5 rounded border border-amber-dim flex items-center gap-2">
+                                                <span className="animate-pulse">Select note on keyboard</span>
+                                                <button 
+                                                    onClick={() => {
+                                                        setPatterns(p => {
+                                                            const next = [...p];
+                                                            const pat = {...next[currentPatternIndex]};
+                                                            const track = [...pat[editingNote.track]];
+                                                            track[editingNote.step] = {};
+                                                            pat[editingNote.track] = track;
+                                                            next[currentPatternIndex] = pat;
+                                                            audioEngine.setSequencerPattern(currentPatternIndex, pat);
+                                                            return next;
+                                                        });
+                                                        setEditingNote(null);
+                                                    }}
+                                                    className="bg-red-500/20 text-red-400 border border-red-500/50 px-1.5 rounded hover:bg-red-500/40 not-italic btn-hardware"
+                                                    title="Erase Note"
+                                                >
+                                                    Erase
+                                                </button>
+                                                <button onClick={() => setEditingNote(null)} className="ml-1 hover:text-white px-1">&times;</button>
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col xl:flex-row gap-3 sm:gap-6 mb-4 justify-between w-full">
+                                <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 items-start sm:items-center overflow-x-auto w-full">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] uppercase text-vintage-text-dim mb-1">Song Sequence</span>
+                                        <div className="flex gap-1 items-center bg-vintage-bg p-1 rounded border border-vintage-border overflow-x-auto w-full md:max-w-[400px]">
+                                            {songSequence.map((patIdx, i) => (
+                                                <div key={i} className="flex flex-col items-center shrink-0">
+                                                    <div 
+                                                        className={`w-10 h-10 flex items-center justify-center text-xs font-mono rounded relative transition-colors
+                                                            ${(sequencerPlaying && currentSongPos === i) ? 'bg-amber-dimmer text-amber-primary border border-amber-primary/50' : 'bg-vintage-panel text-vintage-text-dim border border-vintage-border hover:border-vintage-border'}
+                                                        `}
+                                                    >
+                                                        <select 
+                                                            value={patIdx}
+                                                            onChange={e => {
+                                                                const next = [...songSequence];
+                                                                next[i] = Number(e.target.value);
+                                                                setSongSequence(next);
+                                                            }}
+                                                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                                        >
+                                                            {patterns.map((_, pIdx) => (
+                                                                <option key={pIdx} value={pIdx}>{pIdx}</option>
+                                                            ))}
+                                                        </select>
+                                                        {patIdx}
+                                                    </div>
+                                                    {songSequence.length > 1 && (
+                                                        <button onClick={() => setSongSequence(s => s.filter((_, idx) => idx !== i))} className="text-[8px] text-red-500 mt-1 hover:text-red-400 btn-hardware">X</button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <button 
+                                                onClick={() => setSongSequence(s => [...s, 0])}
+                                                className="w-10 h-10 flex items-center justify-center text-xs font-mono rounded bg-vintage-panel text-vintage-text-dim border border-vintage-border hover:border-vintage-border ml-1 shrink-0 btn-hardware"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex flex-col w-full md:w-auto">
+                                        <span className="text-[10px] uppercase text-vintage-text-dim mb-1">Edit Pattern</span>
+                                        <div className="flex gap-1 items-center bg-vintage-bg p-1 rounded border border-vintage-border overflow-x-auto w-full md:max-w-[200px]">
+                                            {patterns.map((_, pIdx) => (
+                                                <button
+                                                    key={pIdx}
+                                                    onClick={() => setCurrentPatternIndex(pIdx)}
+                                                    className={`w-10 h-10 flex items-center justify-center text-xs font-mono rounded transition-colors shrink-0
+                                                        ${currentPatternIndex === pIdx ? 'bg-amber-dimmer text-amber-primary border border-amber-primary' : 'bg-vintage-panel text-vintage-text-dim border border-vintage-border hover:border-vintage-border'}
+                                                    `}
+                                                >
+                                                    {pIdx}
+                                                </button>
+                                            ))}
+                                            <button 
+                                                onClick={() => {
+                                                    const newIdx = patterns.length;
+                                                    const newPatterns = [...patterns, {
+                                                        pulse1: Array.from({ length: 16 }, () => ({})),
+                                                        pulse2: Array.from({ length: 16 }, () => ({})),
+                                                        triangle: Array.from({ length: 16 }, () => ({})),
+                                                        noise: Array.from({ length: 16 }, () => ({})),
+                                                    }];
+                                                    setPatterns(newPatterns);
+                                                    audioEngine.setSequencerPatterns(newPatterns);
+                                                    setCurrentPatternIndex(newIdx);
+                                                }}
+                                                className="w-10 h-10 flex items-center justify-center text-xs font-mono rounded bg-vintage-panel text-vintage-text-dim border border-vintage-border hover:border-vintage-border ml-1 shrink-0 btn-hardware"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col w-full md:w-auto">
+                                        <span className="text-[10px] uppercase text-vintage-text-dim mb-1">Functions</span>
+                                        <div className="flex gap-1 items-center bg-vintage-bg p-1 rounded border border-vintage-border h-12">
+                                            <button 
+                                                onClick={handleRandomizePattern}
+                                                className="flex items-center gap-1.5 px-3 bg-vintage-panel hover:bg-vintage-surface text-amber-primary text-[10px] font-bold rounded border border-vintage-border transition-colors btn-hardware h-10 shrink-0"
+                                                title="Randomize Selected Pattern"
+                                            >
+                                                <Dices className="w-3.5 h-3.5" />
+                                                Randomize
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col gap-3 w-full xl:w-auto shrink-0">
+                                    <div className="flex flex-col w-full">
+                                        <span className="text-[10px] uppercase text-vintage-text-dim mb-1">Save / Load Song</span>
+                                        <div className="flex items-center gap-2 tape-slot p-1 px-3 rounded border border-vintage-border bg-vintage-bg h-12 w-full">
+                                            <input 
+                                                type="text" 
+                                                value={songFilename} 
+                                                onChange={e => setSongFilename(e.target.value)}
+                                                placeholder="song-preset"
+                                                className="bg-vintage-bg border border-vintage-border text-[10px] rounded px-2 flex-1 focus:outline-none focus:border-amber-primary/50 text-vintage-text h-10 font-mono min-w-0"
+                                            />
+                                            <button 
+                                                onClick={handleExportSong}
+                                                className="flex items-center gap-1.5 px-2 bg-vintage-panel hover:bg-vintage-surface text-amber-primary text-[10px] font-bold rounded border border-vintage-border transition-colors btn-hardware h-10 shrink-0"
+                                                title="Save Song Preset"
+                                            >
+                                                <Download className="w-3.5 h-3.5" />
+                                                Save
+                                            </button>
+                                            <label className="flex items-center gap-1.5 px-2 bg-vintage-panel hover:bg-vintage-surface text-amber-primary text-[10px] font-bold rounded border border-vintage-border transition-colors cursor-pointer h-10 shrink-0">
+                                                <Upload className="w-3.5 h-3.5" />
+                                                Load
+                                                <input type="file" accept=".json" onChange={handleImportSong} className="hidden" />
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-2 bg-vintage-bg p-1.5 rounded border border-vintage-border w-full">
+                                        <div className="flex items-center gap-1 sm:gap-2">
+                                            <span className="text-[10px] uppercase text-vintage-text-dim font-bold hidden sm:inline">BPM</span>
+                                            <input 
+                                                type="range" 
+                                                min="60" max="240" 
+                                                value={bpm} 
+                                                onChange={(e) => setBpm(Number(e.target.value))}
+                                                className="w-16 sm:w-24 accent-amber-primary cursor-pointer" 
+                                            />
+                                            <span className="text-[10px] text-amber-primary w-6 text-right font-bold">{bpm}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 sm:gap-2 border-l border-vintage-border pl-2 sm:pl-3">
+                                            <span className="text-[10px] uppercase text-vintage-text-dim font-bold hidden sm:inline">SWG</span>
+                                            <input 
+                                                type="range" 
+                                                min="0" max="100" 
+                                                value={swing * 100} 
+                                                onChange={(e) => setSwing(Number(e.target.value) / 100)}
+                                                className="w-12 sm:w-20 accent-amber-primary cursor-pointer" 
+                                            />
+                                            <span className="text-[10px] text-amber-primary w-8 text-right font-bold">{Math.round(swing * 100)}%</span>
+                                        </div>
+                                        <div className="flex gap-1 border-l border-vintage-border pl-2 sm:pl-3">
+                                            <button 
+                                                onClick={() => {
+                                                    if (sequencerPlaying) {
+                                                        audioEngine.pauseSequencer();
+                                                        setSequencerPlaying(false);
+                                                    } else {
+                                                        audioEngine.playSequencer();
+                                                        setSequencerPlaying(true);
+                                                    }
+                                                }}
+                                                className={`px-2 py-1 text-[10px] font-bold rounded border transition-colors ${sequencerPlaying ? 'bg-amber-dimmer text-amber-primary border-amber-primary' : 'bg-vintage-panel text-vintage-text-dim border-vintage-border hover:text-vintage-text hover:border-amber-primary/30'}`}
+                                            >
+                                                {sequencerPlaying ? 'PAUSE' : 'PLAY'}
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    audioEngine.stopSequencer();
+                                                    setSequencerPlaying(false);
+                                                }}
+                                                className="px-2 py-1 text-[10px] font-bold rounded border bg-vintage-panel text-vintage-text-dim border-vintage-border hover:text-vintage-text hover:border-amber-primary/30 transition-colors"
+                                            >
+                                                STOP
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-1">
+                                {(['pulse1', 'pulse2', 'triangle', 'noise'] as const).map(trackName => {
+                                    const shortName = trackName === 'pulse1' ? 'S1' : trackName === 'pulse2' ? 'S2' : trackName === 'triangle' ? 'TR' : 'NZ';
+                                    return (
+                                    <div key={trackName} className="flex gap-1 items-center">
+                                        <div className="w-6 text-[10px] font-bold text-amber-dim text-center shrink-0" title={trackName}>{shortName}</div>
+                                        <div className="flex-1 grid gap-px bg-vintage-surface p-px rounded" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
+                                            {patterns[currentPatternIndex][trackName].map((step, i) => {
+                                                const isCurrent = sequencerPlaying && songSequence[currentSongPos] === currentPatternIndex && i === currentStep;
+                                                return (
+                                                    <div 
+                                                        key={i} 
+                                                        className={`h-12 relative flex items-center justify-center cursor-pointer transition-all duration-75
+    ${step.note !== undefined 
+        ? 'bg-amber-primary text-vintage-bg shadow-[inset_0_1px_2px_rgba(255,255,255,0.5)]' 
+        : step.tie 
+            ? 'bg-hatched opacity-80' 
+            : 'bg-[#050505] shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] hover:bg-[#111]'}
+    ${isCurrent 
+        ? step.note !== undefined || step.tie
+            ? 'z-10 shadow-[0_0_15px_#ff8c1a,inset_0_0_10px_#fff] brightness-125 ring-1 ring-amber-primary'
+            : 'z-10 bg-[#222] shadow-[inset_0_0_10px_#ff8c1a] ring-1 ring-amber-dimmer'
+        : 'border-r border-b border-[#000]'}
+    ${editingNote?.track === trackName && editingNote?.step === i ? 'ring-2 ring-amber-primary z-20 animate-pulse' : ''}
+`}
+                                                        onPointerDown={(e) => {
+                                                            e.preventDefault();
+                                                            e.currentTarget.releasePointerCapture(e.pointerId);
+                                                            const isRightClick = e.button === 2;
+                                                            
+                                                            setPatterns(prev => {
+                                                                const next = [...prev];
+                                                                const pat = {...next[currentPatternIndex]};
+                                                                const newTrack = [...pat[trackName]];
+                                                                const currentStepInfo = newTrack[i];
+                                                                
+                                                                if (isRightClick) {
+                                                                    newTrack[i] = {};
+                                                                    setDragContext({ track: trackName, startStep: i, mode: 'erase', couldErase: false, isEditClick: false });
+                                                                } else {
+                                                                    if (currentStepInfo.note !== undefined) {
+                                                                        // Clicked a note, enable dragging to tie, and mark it for erasing if we release without drag
+                                                                        setDragContext({ track: trackName, startStep: i, mode: 'tie', couldErase: true, isEditClick: trackName !== 'noise' });
+                                                                    } else if (currentStepInfo.tie) {
+                                                                        // Clicked tie, turn to note
+                                                                        newTrack[i] = { note: trackName === 'noise' ? 1 : (currentKeyMap['z']?.freq || 261.63) };
+                                                                        setDragContext({ track: trackName, startStep: i, mode: 'tie', couldErase: false, isEditClick: false });
+                                                                    } else {
+                                                                        // Clicked empty, draw note
+                                                                        newTrack[i] = { note: trackName === 'noise' ? 1 : (currentKeyMap['z']?.freq || 261.63) };
+                                                                        setDragContext({ track: trackName, startStep: i, mode: 'tie', couldErase: false, isEditClick: false });
+                                                                    }
+                                                                }
+                                                                
+                                                                pat[trackName] = newTrack;
+                                                                next[currentPatternIndex] = pat;
+                                                                audioEngine.setSequencerPattern(currentPatternIndex, pat);
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        onPointerEnter={() => {
+                                                            if (!dragContext.mode || dragContext.track !== trackName) return;
+                                                            
+                                                            setDragContext(prev => ({ ...prev, couldErase: false, isEditClick: false })); // If we moved, don't erase the start note
+                                                            
+                                                            setPatterns(prev => {
+                                                                const next = [...prev];
+                                                                const pat = {...next[currentPatternIndex]};
+                                                                const newTrack = [...pat[trackName]];
+                                                                
+                                                                if (dragContext.mode === 'erase') {
+                                                                    newTrack[i] = {};
+                                                                } else if (dragContext.mode === 'tie') {
+                                                                    if (i > dragContext.startStep) {
+                                                                        for (let j = dragContext.startStep + 1; j <= i; j++) {
+                                                                            if (newTrack[j].note === undefined) {
+                                                                                newTrack[j] = { tie: true };
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                
+                                                                pat[trackName] = newTrack;
+                                                                next[currentPatternIndex] = pat;
+                                                                audioEngine.setSequencerPattern(currentPatternIndex, pat);
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        onContextMenu={(e) => e.preventDefault()}
+                                                    >
+                                                        {step.note !== undefined && trackName !== 'noise' && (
+                                                            <div className="text-[8px] pointer-events-none text-[#050505] rotate-[-90deg]">
+                                                                {ALL_NOTES_LIST.find(n => n.freq === step.note)?.name || 'C4'}
+                                                            </div>
+                                                        )}
+                                                        {step.note !== undefined && trackName === 'noise' && (
+                                                            <div className="w-2 h-2 rounded-full bg-[#050505] pointer-events-none" />
