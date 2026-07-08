@@ -1,4 +1,4 @@
-# 8-Bit Synth // P004
+# Cheap Tuna - this fish you can tune 
 
 A retro-styled, highly polished, web-based Chiptune Synthesizer and Step Sequencer heavily inspired by classic 8-bit sound chips (such as the NES APU). Built using React, Tailwind CSS, and the Web Audio API with a custom AudioWorklet engine for authentic, high-fidelity sound.
 
