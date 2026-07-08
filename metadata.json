@@ -1,5 +1,5 @@
 {
-  "name": "8-Bit Chiptune Synth Prototype",
+  "name": "CHEAP TUNA // this fish you can (chip) tune",
   "description": "Prototipagem de sintetizador 8-bit com WebAudio Worklet",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -194,7 +194,6 @@ class PulseVoice {
         this.timerCounter = 0;
         this.dutyMode = 2; // 0=12.5%, 1=25%, 2=50%
         this.sequenceCounter = 0;
-        this.enabled = false;
         this.envelope = new Envelope();
         this.arpeggiator = new Arpeggiator();
         this.vibrato = new Vibrato();
@@ -212,18 +211,16 @@ class PulseVoice {
     
     setFrequency(freq) {
         if (freq === 0) {
-            this.enabled = false;
             this.envelope.stop();
             return;
         }
         this.baseFrequency = freq;
         this.arpeggiator.setBaseFrequency(freq);
-        this.enabled = true;
         this.envelope.start();
     }
 
     tickSample(sampleRate) {
-        if (!this.enabled) return;
+        if (!this.envelope.enabled) return;
         
         this.arpeggiator.tick(sampleRate);
         const freq = this.arpeggiator.getFrequency();
@@ -257,7 +254,7 @@ class PulseVoice {
     }
 
     getSample() {
-        if (!this.enabled || this.timerPeriod < 8) return 0;
+        if (!this.envelope.enabled || this.timerPeriod < 8) return 0;
         
         const envVol = this.envelope.getVolume();
         const baseLevel = this.dutyTable[this.dutyMode][this.sequenceCounter] ? 1.0 : -1.0;
@@ -569,7 +566,9 @@ class ChiptuneProcessor extends AudioWorkletProcessor {
                 if (this.stepAccumulator >= currentSamplesPerStep) {
                     this.stepAccumulator -= currentSamplesPerStep;
                     this.currentStep++;
-                    if (this.currentStep >= this.patternLength) {
+                    const activePattern = this.patterns[this.songSequence[this.currentSongPos]];
+                    const patternLength = activePattern ? activePattern.pulse1.length : this.patternLength;
+                    if (this.currentStep >= patternLength) {
                         this.currentStep = 0;
                         this.currentSongPos = (this.currentSongPos + 1) % this.songSequence.length;
                     }

@@ -3,6 +3,7 @@ import { PulseControls, VibratoControls } from './components/VoicePanel';
 import { Oscilloscope } from './components/Oscilloscope';
 import { BASE_NOTES, ALL_NOTES_LIST, ARP_PATTERNS } from './utils/noteUtils';
 import { VoiceType, ArpConfig, VibratoConfig, PulseConfig, TriangleConfig, StepData, TrackPattern, StepPattern } from './audio/types';
+import { FactoryTimbre, FactorySong } from './data/factoryPresets';
 import { useState, useEffect, ChangeEvent, useCallback, useMemo, useRef, MouseEvent, TouchEvent } from 'react';
 import { audioEngine } from './audio/AudioEngine';
 import { Volume2, Power, Activity, Disc3, Download, Upload, Dices, Copy, ClipboardPaste } from 'lucide-react';
@@ -565,6 +566,39 @@ export default function App() {
         e.target.value = ''; // reset
     };
 
+    const loadFactoryTimbre = (timbre: FactoryTimbre) => {
+        const { params } = timbre;
+        if (activeVoice === 'pulse1' || activeVoice === 'pulse2') {
+            updatePulse(activeVoice, params);
+        } else if (activeVoice === 'triangle') {
+            updateTriangle(params);
+        } else if (activeVoice === 'noise') {
+            if (params.noiseMode !== undefined) {
+                setNoiseMode(params.noiseMode);
+                audioEngine.setNoiseMode(params.noiseMode);
+            }
+            if (params.noisePeriod !== undefined) {
+                setNoisePeriod(params.noisePeriod);
+                audioEngine.setNoisePeriod(params.noisePeriod);
+            }
+        }
+        showToast(`Loaded timbre patch: ${timbre.name}`, 'success');
+    };
+
+    const loadFactorySong = (song: FactorySong) => {
+        setBpm(song.bpm);
+        setSwing(song.swingAmount);
+        setPatterns(song.patterns);
+        setSongSequence(song.songSequence);
+        setCurrentPatternIndex(0);
+        
+        audioEngine.setSequencerBPM(song.bpm);
+        audioEngine.setSequencerSwing(song.swingAmount);
+        audioEngine.setSequencerPatterns(song.patterns);
+        audioEngine.setSequencerSong(song.songSequence);
+        showToast(`Loaded song cartridge: ${song.name}`, 'success');
+    };
+
     const toggleNoise = () => {
         const next = !noisePlaying;
         setNoisePlaying(next);
@@ -649,7 +683,9 @@ export default function App() {
                 </div>
             )}
 <header className="mb-4 pb-2 sm:mb-8 sm:pb-4 border-b-4 border-amber-primary flex flex-col sm:flex-row justify-between items-center w-full max-w-4xl gap-2">
-                <div className="text-2xl font-extrabold tracking-tight text-vintage-text uppercase">8-BIT SYNTH // P004</div>
+                <div id="header-title" className="text-2xl font-extrabold tracking-tight text-vintage-text uppercase">
+                    CHEAP TUNA <span className="text-amber-primary">//</span> <span className="text-xs sm:text-sm font-medium text-vintage-text-dim lowercase tracking-normal">this fish you can (chip) tune</span>
+                </div>
                 <div className="text-xs tracking-widest text-amber-primary font-bold">SYSTEM STATUS: ONLINE</div>
             </header>
 
@@ -664,18 +700,6 @@ export default function App() {
             ) : (
                 <div className="w-full max-w-4xl flex flex-col gap-3 sm:gap-3 sm:gap-6">
                     <div className="module-panel p-3 sm:p-4 pt-3 sm:pt-4 rounded space-y-4 sm:space-y-6 sm:space-y-4 sm:space-y-6">
-                        
-                        <PresetManager 
-                            activeVoice={activeVoice} 
-                            timbreFilename={timbreFilename} 
-                            setTimbreFilename={setTimbreFilename} 
-                            songFilename={songFilename} 
-                            setSongFilename={setSongFilename} 
-                            handleExportTimbre={handleExportTimbre} 
-                            handleImportTimbre={handleImportTimbre} 
-                            handleExportSong={handleExportSong} 
-                            handleImportSong={handleImportSong} 
-                        />
 
                         <div className="space-y-4 sm:space-y-6">
                             {/* Voice Tabs */}
@@ -926,7 +950,7 @@ export default function App() {
                         {/* Keyboard */}
                         <div className="module-panel p-3 sm:p-4 rounded">
                             <div className="flex flex-col md:flex-row md:justify-between items-start md:items-end gap-2 sm:gap-4 mb-4">
-                                <h2 className="text-sm uppercase tracking-wider text-vintage-text-dim">Keyboard Controls</h2>
+                                <h2 className="text-sm uppercase tracking-wider text-amber-primary font-bold">Keyboard Controls</h2>
                                 <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                                     <div className="flex items-center gap-2 mr-4">
                                         <button 
@@ -1030,7 +1054,7 @@ export default function App() {
                             <div className="flex flex-col md:flex-row md:justify-between items-start md:items-end gap-2 sm:gap-4 mb-4">
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center gap-3">
-                                        <h2 className="text-sm uppercase tracking-wider text-vintage-text-dim">Step Sequencer</h2>
+                                        <h2 className="text-sm uppercase tracking-wider text-amber-primary font-bold">Step Sequencer</h2>
                                         {editingNote && (
                                             <span className="text-[10px] uppercase bg-amber-dimmer text-amber-primary px-2 py-0.5 rounded border border-amber-dim flex items-center gap-2">
                                                 <span className="animate-pulse">Select note on keyboard</span>
@@ -1193,7 +1217,18 @@ export default function App() {
                                                 onChange={(e) => setBpm(Number(e.target.value))}
                                                 className="w-16 sm:w-24 accent-amber-primary cursor-pointer" 
                                             />
-                                            <span className="text-[10px] text-amber-primary w-6 text-right font-bold">{bpm}</span>
+                                            <div className="flex items-center gap-1.5 ml-0.5">
+                                                <span className="text-[10px] text-amber-primary w-6 text-right font-bold">{bpm}</span>
+                                                <div 
+                                                    id="bpm-led-indicator"
+                                                    title="Tempo Indicator"
+                                                    className={`w-2 h-2 rounded-full transition-all duration-75 ${
+                                                        sequencerPlaying && currentStep % 4 === 0
+                                                            ? 'bg-amber-primary shadow-[0_0_6px_#ff6b00] scale-110'
+                                                            : 'bg-amber-primary/25 scale-100'
+                                                    }`}
+                                                />
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-1 sm:gap-2 border-l border-vintage-border pl-2 sm:pl-3">
                                             <span className="text-[10px] uppercase text-vintage-text-dim font-bold hidden sm:inline">SWG</span>
@@ -1343,6 +1378,22 @@ export default function App() {
                                     </div>
                                 );
                                 })}
+                            </div>
+                            
+                            <div className="pt-4 sm:pt-6 border-t border-vintage-border/30">
+                                <PresetManager 
+                                    activeVoice={activeVoice} 
+                                    timbreFilename={timbreFilename} 
+                                    setTimbreFilename={setTimbreFilename} 
+                                    songFilename={songFilename} 
+                                    setSongFilename={setSongFilename} 
+                                    handleExportTimbre={handleExportTimbre} 
+                                    handleImportTimbre={handleImportTimbre} 
+                                    handleExportSong={handleExportSong} 
+                                    handleImportSong={handleImportSong} 
+                                    loadFactoryTimbre={loadFactoryTimbre}
+                                    loadFactorySong={loadFactorySong}
+                                />
                             </div>
                         </div>
 
