@@ -45,14 +45,6 @@ export default function App() {
     const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
     const [octave, setOctave] = useState(4);
 
-    const [midiInputs, setMidiInputs] = useState<{id: string, name: string}[]>([]);
-    const [selectedMidiInputId, setSelectedMidiInputId] = useState<string>('all');
-    const selectedMidiInputIdRef = useRef<string>('all');
-
-    useEffect(() => {
-        selectedMidiInputIdRef.current = selectedMidiInputId;
-    }, [selectedMidiInputId]);
-
 
 
     // Sequencer State
@@ -372,9 +364,6 @@ export default function App() {
         let midiAccess: any = null;
 
         const onMIDIMessage = (message: any) => {
-            if (selectedMidiInputIdRef.current !== 'all' && message.target.id !== selectedMidiInputIdRef.current) {
-                return;
-            }
             const command = message.data[0];
             const note = message.data[1];
             const velocity = (message.data.length > 2) ? message.data[2] : 0;
@@ -411,21 +400,17 @@ export default function App() {
         if (navigator.requestMIDIAccess) {
             navigator.requestMIDIAccess().then(access => {
                 midiAccess = access;
-
-                const updateInputs = () => {
-                    const inputs: {id: string, name: string}[] = [];
-                    for (const input of midiAccess.inputs.values()) {
-                        inputs.push({ id: input.id, name: input.name || `Input ${input.id}` });
-                        input.onmidimessage = onMIDIMessage;
-                    }
-                    setMidiInputs(inputs);
-                };
-
-                updateInputs();
+                for (const input of midiAccess.inputs.values()) {
+                    input.onmidimessage = onMIDIMessage;
+                }
                 
                 midiAccess.onstatechange = (e: any) => {
                     if (e.port.type === 'input') {
-                        updateInputs();
+                        if (e.port.state === 'connected') {
+                            e.port.onmidimessage = onMIDIMessage;
+                        } else if (e.port.state === 'disconnected') {
+                            e.port.onmidimessage = null;
+                        }
                     }
                 };
             }).catch(err => {
@@ -435,6 +420,7 @@ export default function App() {
         
         return () => {
             if (midiAccess) {
+                midiAccess.onstatechange = null;
                 for (const input of midiAccess.inputs.values()) {
                     input.onmidimessage = null;
                 }
@@ -705,26 +691,7 @@ export default function App() {
                 <div id="header-title" className="text-2xl font-extrabold tracking-tight text-vintage-text uppercase">
                     CHEAP TUNA <span className="text-amber-primary">//</span> <span className="text-xs sm:text-sm font-medium text-vintage-text-dim lowercase tracking-normal">this fish you can (chip) tune</span>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                    <div className="text-xs tracking-widest text-amber-primary font-bold">SYSTEM STATUS: ONLINE</div>
-                    {started && (
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="text-vintage-text-dim uppercase tracking-wider">MIDI In:</span>
-                            <select
-                                value={selectedMidiInputId}
-                                onChange={(e) => setSelectedMidiInputId(e.target.value)}
-                                className="bg-vintage-surface text-amber-primary border border-amber-primary/30 rounded px-2 py-0.5 outline-none focus:border-amber-primary max-w-[150px] truncate"
-                            >
-                                <option value="all">All Inputs</option>
-                                {midiInputs.map(input => (
-                                    <option key={input.id} value={input.id}>
-                                        {input.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                </div>
+                <div className="text-xs tracking-widest text-amber-primary font-bold">SYSTEM STATUS: ONLINE</div>
             </header>
 
             {!started ? (
