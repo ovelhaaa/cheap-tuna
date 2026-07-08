@@ -405,8 +405,12 @@ export default function App() {
                 }
                 
                 midiAccess.onstatechange = (e: any) => {
-                    if (e.port.type === 'input' && e.port.state === 'connected') {
-                        e.port.onmidimessage = onMIDIMessage;
+                    if (e.port.type === 'input') {
+                        if (e.port.state === 'connected') {
+                            e.port.onmidimessage = onMIDIMessage;
+                        } else if (e.port.state === 'disconnected') {
+                            e.port.onmidimessage = null;
+                        }
                     }
                 };
             }).catch(err => {
@@ -416,6 +420,7 @@ export default function App() {
         
         return () => {
             if (midiAccess) {
+                midiAccess.onstatechange = null;
                 for (const input of midiAccess.inputs.values()) {
                     input.onmidimessage = null;
                 }
