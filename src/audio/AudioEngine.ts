@@ -11,7 +11,7 @@ export class AudioEngine {
         this.context = new (window.AudioContext || (window as any).webkitAudioContext)();
         
         try {
-            await this.context.audioWorklet.addModule('/chiptune-worklet.js');
+            await this.context.audioWorklet.addModule(`${import.meta.env.BASE_URL}chiptune-worklet.js`);
             this.workletNode = new AudioWorkletNode(this.context, 'chiptune-processor');
             
             this.filter = this.context.createBiquadFilter();
